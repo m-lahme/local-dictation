@@ -150,7 +150,7 @@ class AudioRecorder:
     def __init__(self, max_duration: float = 30):
         self._chunks: deque[np.ndarray] = deque()
         self._stream: sd.InputStream | None = None
-        self._max_samples = int(max_duration * SAMPLE_RATE)
+        self._max_samples = int(max_duration * SAMPLE_RATE) if max_duration else None
 
     def _callback(self, indata: np.ndarray, frames: int, time_info, status):
         if status:
@@ -177,7 +177,7 @@ class AudioRecorder:
             return np.array([], dtype=np.float32)
         audio = np.concatenate(list(self._chunks))
         # Enforce max duration
-        if len(audio) > self._max_samples:
+        if self._max_samples is not None and len(audio) > self._max_samples:
             audio = audio[: self._max_samples]
         return audio
 
@@ -229,7 +229,7 @@ class Transcriber:
             language=self.language,
             initial_prompt=self.initial_prompt,
             vad_filter=True,
-            chunk_length=self.max_duration,
+            chunk_length=self.max_duration if self.max_duration else 30,
         )
         text_parts = [seg.text for seg in segments]
         text = re.sub(r" {2,}", " ", " ".join(text_parts).strip())
@@ -486,10 +486,13 @@ class DictationApp:
     def _recording_progress_loop(self):
         max_dur = self.config["max_duration"]
         while self._recording and not self._cancelled:
-            elapsed = time.perf_counter() - self._recording_start
-            self.overlay.set_progress(min(1.0, elapsed / max_dur))
-            if elapsed >= max_dur:
-                break
+            if max_dur:
+                elapsed = time.perf_counter() - self._recording_start
+                self.overlay.set_progress(min(1.0, elapsed / max_dur))
+                if elapsed >= max_dur:
+                    break
+            else:
+                self.overlay.set_progress(1.0)
             time.sleep(0.05)
 
     def _on_release(self):
