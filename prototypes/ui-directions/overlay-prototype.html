@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PROTOTYPE · Overlay language · Local Dictation</title>
+  <link rel="stylesheet" href="overlay-prototype.css">
+</head>
+<body>
+  <main class="prototype-shell">
+    <header class="prototype-header">
+      <div>
+        <p class="eyebrow">PROTOTYPE · ISSUE 6</p>
+        <h1>Overlay state and interaction language</h1>
+        <p class="lede">Der final gewählte Erfolgshaken in der kleinen Geometrie und mit farbigen Balken. Zustände wechseln, Mikrofonpegel regeln, Overlay ziehen und die Fallbacks vergleichen.</p>
+      </div>
+      <div class="live-readout" aria-live="polite">
+        <span id="variant-readout">A · Balanced</span>
+        <strong id="state-readout">Bereit</strong>
+      </div>
+    </header>
+
+    <section class="workbench" aria-label="Overlay-Prototyp Arbeitsfläche">
+      <div class="monitor-stage" id="monitor-stage">
+        <div class="monitor monitor-primary" data-monitor="primary">
+          <span class="monitor-label">Primär · 1920 × 1080 · 100%</span>
+          <div class="safe-area"></div>
+          <div class="taskbar"></div>
+        </div>
+        <div class="monitor monitor-secondary" data-monitor="secondary">
+          <span class="monitor-label">Sekundär · 2560 × 1440 · 150%</span>
+          <div class="safe-area"></div>
+          <div class="taskbar taskbar-side"></div>
+        </div>
+
+        <button class="overlay-hit-area" id="overlay" type="button" aria-label="Local Dictation. Bereit. Klicken für Anwendungsmenü; ziehen zum temporären Verschieben.">
+          <span class="overlay-pill" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i>
+          </span>
+        </button>
+
+        <div class="app-menu" id="app-menu" hidden>
+          <strong>Local Dictation</strong>
+          <button type="button">Transkriptionsverlauf</button>
+          <button type="button">Wörterbuch</button>
+          <button type="button">Overlay ausblenden</button>
+          <hr>
+          <button type="button">Einstellungen</button>
+          <button type="button">Beenden</button>
+        </div>
+
+        <div class="gesture-readout" id="gesture-readout">Home: Primär · unten Mitte</div>
+      </div>
+
+      <aside class="controls" aria-label="Prototyp-Steuerung">
+        <fieldset>
+          <legend>Zustand</legend>
+          <div class="segmented state-controls" id="state-controls">
+            <button type="button" data-state="idle" aria-pressed="true">Bereit</button>
+            <button type="button" data-state="recording">Aufnahme</button>
+            <button type="button" data-state="transcribing">Transkription</button>
+            <button type="button" data-state="loading">Modell laden</button>
+            <button type="button" data-state="success">Erfolg</button>
+            <button type="button" data-state="error">Fehler</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="level-control">
+          <legend>Mikrofonpegel · Simulation</legend>
+          <label for="mic-level">Eingangspegel <output id="mic-level-value">55%</output></label>
+          <input id="mic-level" type="range" min="0" max="100" value="55">
+          <p id="mic-level-hint">Normale Sprechlautstärke · geglättet</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Platzierung</legend>
+          <label>Monitor
+            <select id="monitor-select">
+              <option value="primary">Primär · 100%</option>
+              <option value="secondary">Sekundär · 150%</option>
+              <option value="missing">Gespeicherter Monitor fehlt</option>
+            </select>
+          </label>
+          <label>Anker
+            <select id="anchor-select">
+              <option value="bottom-center">Unten Mitte</option>
+              <option value="top-center">Oben Mitte</option>
+              <option value="top-left">Oben links</option>
+              <option value="top-right">Oben rechts</option>
+              <option value="bottom-left">Unten links</option>
+              <option value="bottom-right">Unten rechts</option>
+            </select>
+          </label>
+          <button class="secondary-action" id="return-home" type="button">Zur Home-Position</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Accessibility</legend>
+          <label class="check"><input id="reduced-motion" type="checkbox"> Reduzierte Bewegung</label>
+          <label class="check"><input id="high-contrast" type="checkbox"> Hoher Kontrast</label>
+          <p class="screen-reader-copy"><span>Screen reader:</span> <output id="sr-output">Local Dictation. Bereit.</output></p>
+        </fieldset>
+
+        <section class="spec-card" aria-labelledby="spec-title">
+          <h2 id="spec-title">Aktuelle Variante</h2>
+          <dl id="spec-list"></dl>
+        </section>
+      </aside>
+    </section>
+
+    <section class="check-editor-section" aria-labelledby="check-editor-title">
+      <header>
+        <div>
+          <p class="eyebrow">INTERAKTIVER HAKEN-EDITOR · 4× VERGRÖSSERT</p>
+          <h2 id="check-editor-title">Balken pixelgenau ausrichten</h2>
+        </div>
+        <p>Jeder Schritt entspricht 1 DIP im echten 64 × 28-DIP-Overlay. Alle vier Balken bleiben exakt 7 DIP lang.</p>
+      </header>
+      <div class="check-editor-layout">
+        <div class="check-editor-canvas">
+          <div class="editor-pill" id="check-editor-pill" aria-label="Vier verschiebbare Balken in vierfach vergrößerter Overlay-Vorschau">
+            <button class="editor-bar" type="button" role="slider" data-check-bar="0" aria-label="Balken 1" aria-orientation="vertical" aria-valuemin="-8" aria-valuemax="8" aria-valuenow="1"></button>
+            <button class="editor-bar" type="button" role="slider" data-check-bar="1" aria-label="Balken 2" aria-orientation="vertical" aria-valuemin="-8" aria-valuemax="8" aria-valuenow="6"></button>
+            <button class="editor-bar" type="button" role="slider" data-check-bar="2" aria-label="Balken 3" aria-orientation="vertical" aria-valuemin="-8" aria-valuemax="8" aria-valuenow="0"></button>
+            <button class="editor-bar" type="button" role="slider" data-check-bar="3" aria-label="Balken 4" aria-orientation="vertical" aria-valuemin="-8" aria-valuemax="8" aria-valuenow="-6"></button>
+          </div>
+          <p>Ziehen oder Balken fokussieren und <kbd>↑</kbd>/<kbd>↓</kbd> drücken.</p>
+          <output id="check-offset-summary" aria-live="polite">B1 +1 · B2 +6 · B3 0 · B4 −6</output>
+        </div>
+
+        <div class="check-editor-controls" aria-label="Pixelgenaue Balkenpositionen">
+          <div class="check-sliders">
+            <label for="check-offset-0"><span>Balken 1</span><output data-check-output="0">+1 DIP</output></label>
+            <input id="check-offset-0" data-check-range="0" type="range" min="-8" max="8" step="1" value="1">
+            <label for="check-offset-1"><span>Balken 2</span><output data-check-output="1">+6 DIP</output></label>
+            <input id="check-offset-1" data-check-range="1" type="range" min="-8" max="8" step="1" value="6">
+            <label for="check-offset-2"><span>Balken 3</span><output data-check-output="2">0 DIP</output></label>
+            <input id="check-offset-2" data-check-range="2" type="range" min="-8" max="8" step="1" value="0">
+            <label for="check-offset-3"><span>Balken 4</span><output data-check-output="3">−6 DIP</output></label>
+            <input id="check-offset-3" data-check-range="3" type="range" min="-8" max="8" step="1" value="-6">
+          </div>
+          <div class="editor-actions">
+            <button id="reset-check-s3" type="button">Finale Werte wiederherstellen</button>
+            <button id="center-check-bars" type="button">Alle zentrieren</button>
+          </div>
+          <p class="editor-note">Negative Werte verschieben nach oben, positive nach unten. Die Live-Vorschau wird beim Bearbeiten automatisch auf „Erfolg“ gesetzt.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="prototype-switcher" aria-label="Prototyp-Varianten">
+    <button id="previous-variant" type="button" aria-label="Vorherige Variante">←</button>
+    <span id="switcher-label">A · Finale Geometrie</span>
+    <button id="next-variant" type="button" aria-label="Nächste Variante">→</button>
+  </nav>
+
+  <script src="overlay-prototype.js"></script>
+</body>
+</html>
