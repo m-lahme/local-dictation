@@ -8,6 +8,10 @@ Local Dictation is a Windows application for capturing speech, transcribing it, 
 A single interaction that begins with speech capture and ends when its transcription is inserted into the user's active application or deliberately discarded.
 _Avoid_: Recording, job
 
+**Dictation cancellation**:
+The deliberate immediate end of a Dictation during capture, model wait, or transcription. Captured audio and partial results are discarded, no History entry is created, and Local Dictation prepares for the next Dictation; an independent Model package load already in progress may continue.
+_Avoid_: Recording cancellation, transcription cancellation
+
 **Push-to-talk dictation**:
 A dictation whose speech capture remains active only while its assigned global hotkey is held.
 _Avoid_: Hold mode
@@ -63,6 +67,22 @@ _Avoid_: Listening, background recording
 **Transcription readiness**:
 The state in which the selected transcription model is loaded and can process captured audio. A Dictation may begin before transcription readiness is reached; model loading becomes visible only when it delays processing after speech capture ends.
 _Avoid_: App readiness, capture readiness
+
+**Transcription language**:
+The language inferred from a Dictation by the active transcription model. V1 does not ask the user to choose a language before dictating; the languages that can be recognized depend on the active model's native capabilities.
+_Avoid_: Selected language, configured language
+
+**Model package**:
+A downloadable form of a transcription model with particular quality and resource characteristics. Multiple Model packages may provide the same transcription model; V1 presents their practical trade-offs rather than requiring users to understand internal quantization names.
+_Avoid_: Quantization option, model file
+
+**Active Model package**:
+The single installed Model package chosen for future Dictations. Changing it never changes the package used by a Dictation already in progress.
+_Avoid_: Default model, model per hotkey
+
+**Model compatibility**:
+The assessment of whether a Model package is expected to run within a device's supported resource constraints. V1 shows this assessment and the package's practical characteristics without selecting, hiding, or switching Model packages for the user.
+_Avoid_: Model recommendation, automatic model selection
 
 **Audio input availability**:
 The selected microphone's demonstrated ability to deliver valid audio samples. An existing or nominally active stream alone does not establish availability after device changes, interruptions, or Remote Desktop reconnections.
