@@ -1,9 +1,0 @@
-{
-  "hotkey": "strg+linke windows",
-  "language": null,
-  "model": "large-v3-turbo",
-  "device": "auto",
-  "initial_prompt": "claude code CLAUDE.md",
-  "max_duration": null,
-  "keep_in_clipboard": false
-}

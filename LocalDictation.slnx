@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LocalDictation/LocalDictation.csproj" />
+    <Project Path="src/NativeWorker/NativeWorker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NativeAudit/NativeAudit.csproj" />
+  </Folder>
+</Solution>

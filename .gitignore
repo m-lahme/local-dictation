@@ -1,0 +1,25 @@
+# Build output and local caches
+**/bin/
+**/obj/
+.tools/
+dist/
+work/
+.vs/
+*.user
+*.suo
+*.log
+
+# Legacy local environments and generated audit artifacts
+.venv/
+__pycache__/
+*.pyc
+tests/*.exe
+tests/*.png
+
+# Local configuration and model weights
+.env
+.env.*
+!.env.example
+native-models/
+*.gguf
+*.safetensors

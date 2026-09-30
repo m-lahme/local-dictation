@@ -28,7 +28,7 @@ Cloud transcription providers are considered as a future extension seam but are 
 - Avoid gradients and large accent-colored surfaces.
 - App icon direction: four vertical bars of different heights representing an audio level.
 - Exact colors, bar geometry, and animation timing remain to be refined later.
-- Static design sketches live under `prototypes/ui-directions/`.
+- Static design sketches were removed after the native implementation replaced them; they remain available in Git history.
 
 ## Application surfaces and lifecycle
 

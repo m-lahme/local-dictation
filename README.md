@@ -1,156 +1,95 @@
 # Local Dictation
 
-A local, offline speech-to-text dictation tool for Windows. Hold a hotkey, speak, release, and the transcribed text is pasted into whatever application has focus. Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — no cloud services, no API keys.
+Native Diktier-App für Windows 11 x64: Aufnahme per Hotkey, lokale Transkription und Einfügen in die aktive Anwendung. Oberfläche und Audioaufnahme sind in C# mit WPF und WASAPI implementiert. Ein separater C#-Worker bindet whisper.cpp und sherpa-onnx ein. Python ist keine Abhängigkeit.
 
-## Requirements
+## Bauen und starten
 
-- Windows 10/11
-- Python 3.10+
-- A working microphone
-- Administrator privileges (required by the `keyboard` library for global hotkeys)
+Voraussetzungen zum Entwickeln: Windows 11 x64, PowerShell 7 und .NET SDK 10. Beim ersten Build werden NuGet-Pakete heruntergeladen. Die App benötigt außerdem die Microsoft Visual C++ x64 Runtime.
 
-### CUDA (optional)
+Aus dem Repository-Hauptverzeichnis:
 
-If you have an NVIDIA GPU with CUDA support, the tool will automatically use it for faster transcription. Otherwise it falls back to CPU.
-
-## Installation
-
-1. Clone or download this repository.
-
-2. Install the dependencies:
-
-   ```
-   pip install keyboard numpy sounddevice faster-whisper
-   ```
-
-3. Run the tool as Administrator:
-
-   ```
-   python dictation.py
-   ```
-
-   On first launch the Whisper model will be downloaded automatically (this may take a few minutes depending on your connection).
-
-### Desktop Installation (optional)
-
-Run the install script to set up shortcuts so you can launch the tool without a terminal:
-
-```
-python install.py
+```powershell
+.\build.ps1
+.\run.ps1
 ```
 
-It will ask you for each option individually:
+Der Build enthält die .NET-Laufzeit. Alternativ direkt `bin\LocalDictation.exe` starten. Ein ZIP-Release vollständig entpacken und darin `LocalDictation.exe` öffnen. Die Sprachmodelle lädt die App separat herunter; sie sind weder im Repository noch im App-Paket enthalten.
 
-- **Desktop shortcut** — launch from your desktop
-- **Start Menu shortcut** — find and pin the app via Windows Search
-- **Autostart at logon** — start the tool automatically when you log in
+Beim Erststart erscheint das Overlay. Ein erneuter Start öffnet das Hauptfenster derselben Instanz. Ein linker Klick auf das Tray-Icon blendet das Hauptfenster ein oder aus. Ist das Overlay im Leerlauf ausgeblendet, öffnet der normale Erststart stattdessen das Hauptfenster. Windows-Autostart bleibt ohne Hauptfenster.
 
-Shortcuts launch the app with `pythonw.exe` (no console window). To quit, click the **×** button on the overlay.
+- Strg + Windows kurz drücken startet ein Diktat; erneut drücken beendet es.
+- Gedrückt halten und nach der Halteschwelle loslassen verwendet Push-to-talk.
+- Zweimal schnell drücken öffnet die Korrektur des letzten Diktats anhand des markierten, korrigierten Textes.
+- Alternativ ist Strg + Umschalt + Leertaste konfigurierbar.
+- Escape verwirft Aufnahme, Modellwartezeit oder Transkription. Im Leerlauf bleibt Escape frei.
+- Das Fenster schließen lässt die App weiterlaufen. Vollständig beenden über Seitenleiste, Tray oder Overlay-Menü.
 
-To remove all shortcuts:
+## Modelle
 
-```
-python install.py --uninstall
-```
+Whisper 3 Turbo verwendet whisper.cpp mit Vulkan auf einer dedizierten GPU. Parakeet TDT 0.6B v3 verwendet sherpa-onnx auf der CPU. Aufnahme und Modellvorbereitung laufen unabhängig. Bei der ersten GPU-Nutzung kann der Shader-Aufbau einige Sekunden dauern. Wenn Vulkan oder die GPU ausfällt, kann Parakeet dasselbe Diktat auf der CPU verarbeiten. Whisper auf der CPU ist deaktiviert.
 
-## Usage
+Der optionale automatische Modellwechsel reagiert auf Windows-Energieereignisse: Auf unterstützten ASUS-Systemen bedeutet Leise Parakeet/CPU, Performance oder Turbo Whisper/GPU. Auf anderen Geräten werden eindeutige Energiespar- und Höchstleistungsprofile entsprechend zugeordnet. Ausbalancierte und unbekannte Profile behalten das aktive Modell bei. Wechsel erfolgen nach 15 stabilen Sekunden und erst nach einem laufenden Diktat. Optional wird Whisper nach einer einstellbaren Leerlaufzeit entladen und beim nächsten Diktat wieder geladen.
 
-1. Launch the script. A small status overlay appears and shows **"Loading..."** while the model loads.
-2. Once the overlay switches to **"Ready"**, hold down the hotkey (default: `Ctrl+Win`).
-3. The overlay turns red with **"Recording..."** — speak into your microphone.
-4. Release the hotkey. The overlay turns amber with **"Transcribing..."**.
-5. Once complete, the transcribed text is pasted into the active window and the overlay briefly flashes green with **"Done!"**.
-6. To exit, click the **×** on the overlay or press `Ctrl+C` in the terminal.
+Der Modellkatalog enthält feste Quellrevisionen, Größen und SHA-256-Prüfsummen. Downloads werden vor der Aktivierung geprüft. Inaktive Modelle lassen sich über die Einstellungen entfernen.
 
-The overlay is always on top and can be repositioned by clicking and dragging it.
+## Wörterbuch, Verlauf und Statistik
 
-### Debug mode
+Ersetzungsregeln werden in sichtbarer Reihenfolge angewendet. Sie unterstützen ganze Wörter oder Wortteile, wählbare Groß-/Kleinschreibung und Unicode-Normalisierung. Regeln lassen sich suchen und per Drag & Drop umsortieren. Aus markiertem, korrigiertem Text kann die App neue Regeln vorschlagen; diese werden vor dem Übernehmen geprüft und bearbeitet.
 
-To identify the correct key names for your keyboard layout, run:
+Der Verlauf enthält Diktate der letzten 30 Tage. Aufnahmen stehen eine Stunde lang für eine erneute Transkription mit einem anderen Modell zur Verfügung. Eine optionale zweite Whisper-Transkription prüft auffällige fehlende Großschreibung oder Satzzeichen. Ein orangefarbener Haken weist auf ein prüfenswertes Ergebnis hin; er ist keine verlässliche Aussage darüber, ob der Text korrekt ist.
 
-```
-python dictation.py --debug
-```
+Optionale Sprachbefehle setzen Stichpunkte, neue Zeilen und Absätze um. Die Statistik zeigt Wörter, Diktierzeit und geschätzte Zeitersparnis. Die Tippgeschwindigkeit lässt sich einstellen oder mit einem Tipptest ermitteln.
 
-This prints every key press/release event with its name and scan code. Use these names when configuring the `hotkey` option.
+## Daten und Textausgabe
 
-## Configuration
+Alle Nutzerdaten liegen unter `%LOCALAPPDATA%\LocalDictation`: Einstellungen, Wörterbuch, Verlauf, Nutzungsstatistik, vorübergehend gespeicherte Aufnahmen, begrenzte Diagnoselogs und `native-models`. Alte Text-/TSV-Einstellungen werden übernommen; die Originaldateien bleiben als Migrationssicherung erhalten. Die automatische Bereinigung betrifft die aktiven Daten, nicht diese Sicherungen. Es gibt keine feste Aufnahmedauer; Arbeitsspeicher und Laufzeitgrenzen begrenzen sehr lange Aufnahmen.
 
-Create a `config.json` file in the same directory as `dictation.py`. All options are optional — any omitted option uses its default value.
+„Nur einfügen“ nutzt einmaliges Strg+V, wenn sämtliche Zwischenablageinhalte sicher gesichert und wiederhergestellt werden können. Unterstützt werden unter anderem Text, HTML, RTF, Bilddaten und bekannte Metadaten von Browsern und Code-Editoren. Ein neuer Kopiervorgang hat Vorrang vor der Wiederherstellung. Temporärer Text und Wiederherstellung werden vom Windows-Zwischenablageverlauf und Cloud-Sync ausgeschlossen. Unbekannte oder nicht sicher kopierbare Formate bleiben unangetastet; dann verwendet die App langsamere Unicode-Zeicheneingabe.
 
-### Example
+„Nur Zwischenablage“ und „Einfügen plus Zwischenablage“ behalten das Diktat ausdrücklich in der Zwischenablage. Höher berechtigte Zielprogramme können Eingaben blockieren. Ein Abruf aus der Zwischenablage bestätigt nicht in jeder Anwendung erfolgreiches Einfügen; der Text bleibt zusätzlich im Verlauf. Es werden keine partiellen Modellergebnisse eingefügt.
 
-```json
-{
-  "hotkey": "strg+linke windows",
-  "language": null,
-  "model": "large-v3-turbo",
-  "device": "auto",
-  "initial_prompt": "",
-  "max_duration": 60,
-  "cancel_key": "escape",
-  "keep_in_clipboard": false,
-  "overlay_position": "bottom-center"
-}
+## Repository-Struktur
+
+```text
+LocalDictation.slnx      Projektmappe für App, Worker und Tests
+src/LocalDictation/      WPF-App, Aufnahme, Hotkeys, Daten und Windows-Integration
+src/NativeWorker/        Isolierter Transkriptionsprozess
+tests/NativeAudit/       C#-Regressionen und optionale Integrationstests
+tests/audio/            Synthetische Sprachclips für manuelle Modelltests
+assets/                 App-Icon und Logo-Größen
+licenses/               Lizenztexte der Abhängigkeiten
+docs/                   Architektur-Recherche, Planung und Entwicklungshinweise
+build.ps1               App und Worker nach bin/ veröffentlichen
+package.ps1             ZIP, Hashmanifest und SHA-256-Datei erzeugen
+setup.ps1               Geprüftes Paket pro Benutzer installieren
+configure.ps1           Einstellungen programmgesteuert lesen/ändern
 ```
 
-### Options
+Nur die native App wird weitergeführt. Die abgelöste Python-App und UI-Prototypen sind aus dem aktuellen Stand entfernt und bleiben über die Git-Historie zugänglich. `bin/`, `dist/`, `work/` und lokale Abhängigkeitscaches sind nicht versioniert. Die Dokumente unter `docs/planning` und `docs/research` beschreiben frühere Entscheidungen und Recherchen; sie sind keine vollständige Beschreibung des heutigen Funktionsumfangs.
 
-| Option              | Type             | Default                | Description                                                                                                                                                                                                                |
-| ------------------- | ---------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hotkey`            | string           | `"strg+linke windows"` | The key combination to hold while dictating. Key names depend on your OS keyboard layout — use `--debug` mode to find the correct names. For a standard US layout you would use `"ctrl+left windows"`.                     |
-| `language`          | string or null   | `null`                 | Language code for transcription (e.g. `"en"`, `"de"`). Set to `null` for automatic language detection.                                                                                                                     |
-| `model`             | string           | `"large-v3-turbo"`     | The Whisper model to use. Options include `"tiny"`, `"base"`, `"small"`, `"medium"`, `"large-v3"`, `"large-v3-turbo"`. Larger models are more accurate but slower and use more memory.                                     |
-| `device`            | string           | `"auto"`               | Compute device. `"auto"` detects CUDA automatically. Set to `"cuda"` to force GPU or `"cpu"` to force CPU.                                                                                                                 |
-| `initial_prompt`    | string           | `""`                   | An optional text hint passed to Whisper to bias transcription toward specific vocabulary or formatting style. See [Initial Prompt](#initial-prompt) below for details.                                                     |
-| `max_duration`      | number           | `60`                   | Maximum recording duration in seconds. Recording is automatically capped at this length.                                                                                                                                   |
-| `cancel_key`        | string or null   | `"escape"`             | Key to cancel an in-progress recording or transcription. The overlay reverts to "Ready" and no text is pasted. Set to `null` to disable.                                                                                   |
-| `keep_in_clipboard` | boolean          | `false`                | If `true`, the transcribed text stays in the clipboard after pasting, so you can paste it again or access it via clipboard history (Win+V). If `false`, the clipboard is restored to its previous content after pasting.   |
-| `overlay_position`  | string or [x, y] | `"bottom-center"`      | Starting position of the status overlay. Named positions: `"bottom-center"`, `"bottom-right"`, `"bottom-left"`, `"top-right"`, `"top-left"`. Or provide exact pixel coordinates as a two-element array, e.g. `[500, 300]`. |
+## Prüfen und paketieren
 
-### Initial Prompt
+```powershell
+# Logiktests ohne Fenster, Mikrofonaufnahme oder simulierte Tastatureingaben
+.\tests\run-native-regression.ps1
 
-The `initial_prompt` option is a **vocabulary and style hint** for the Whisper model — it is _not_ an instruction. Whisper is a speech-to-text model, not a chatbot, so it will not follow commands like "output as Markdown" or "only return to-do items".
+# Optional: zusätzlich native Fenster öffnen und Renderbilder erzeugen
+.\tests\run-native-regression.ps1 -Visual
 
-Internally, Whisper treats the `initial_prompt` text as if it were the transcript of speech that came right before your recording. This biases the model's predictions in two ways:
-
-- **Vocabulary**: Words and terms in the prompt are more likely to be recognized correctly. This is especially useful for uncommon proper nouns, technical jargon, or domain-specific terms that Whisper might otherwise misspell or miss.
-- **Style**: Whisper mimics the formatting style of the prompt. If the prompt uses proper punctuation and capitalization, the output tends to as well. If the prompt is all lowercase without punctuation, the output follows suit.
-
-#### Examples
-
-| Goal                 | `initial_prompt` value                                                  |
-| -------------------- | ----------------------------------------------------------------------- |
-| Programming terms    | `"TypeScript, useState, async, await, Kubernetes, PostgreSQL"`          |
-| Proper nouns         | `"Anthropic, Claude, OpenAI, Hugging Face"`                             |
-| Medical terminology  | `"Patient presents with dyspnea, tachycardia, and bilateral crackles."` |
-| German dictation     | `"Heute besprechen wir die Ergebnisse der letzten Besprechung."`        |
-| Enforce punctuation  | `"Hello, how are you? I'm doing well. Let's get started."`              |
-| Suppress punctuation | `"hello how are you i am doing well lets get started"`                  |
-| Default (no bias)    | `""`                                                                    |
-
-#### Common mistake
-
-Do **not** write instructions like:
-
-```json
-"initial_prompt": "parse todo items from the transcript and output only the to-dos in Markdown."
+# Sauberen separaten Build paketieren; laufende Installation bleibt unberührt
+.\build.ps1 -Output .\dist\publish
+.\package.ps1 -Source .\dist\publish
 ```
 
-Whisper will ignore the instruction and may hallucinate words from it (e.g. inserting "to-do" or "Markdown" into unrelated transcriptions). Instead, put example text that resembles what you expect the output to look like, or list the specific words you want Whisper to recognize.
+Das ZIP und seine SHA-256-Datei liegen unter `dist/`. Das Hashmanifest liegt im ZIP. Nach dem Entpacken installiert `setup.ps1` das Paket pro Benutzer. Updates behalten die vorherige Installation als Rückfallordner. Modelle und Nutzerdaten liegen außerhalb. Es gibt keinen automatischen Online-Updater und keine öffentliche Codesignatur. Hinweise zu Abhängigkeiten stehen in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-## Status Overlay
+Einstellungen können ohne UI gelesen und geändert werden:
 
-The floating overlay shows the current state of the tool at a glance:
+```powershell
+.\configure.ps1 -Show
+.\configure.ps1 -Engine parakeet -Restart
+.\configure.ps1 -AutomaticPowerModel $true -Restart
+.\bin\LocalDictation.exe --shutdown
+```
 
-| State        | Color                        | Text              |
-| ------------ | ---------------------------- | ----------------- |
-| Loading      | Dark blue                    | "Loading..."      |
-| Idle         | Dark gray                    | "Ready"           |
-| Recording    | Red                          | "Recording..."    |
-| Transcribing | Amber                        | "Transcribing..." |
-| Done         | Green (1s)                   | "Done!"           |
-| Cancelled    | Gray (1.5s)                  | "Cancelled"       |
-| Error        | Red text on dark gray (1.5s) | "Error"           |
-
-The "Done" and "Error" states automatically revert to "Ready" after a short delay. The overlay can be dragged to any position on screen.
+Ohne `-Restart` verweigert das Skript Änderungen an einer laufenden App. Die Regressionen verwenden eigene Daten unter `work/tests/`. Hinweise zu gezielten Hardwaretests stehen in [tests/README.md](tests/README.md).
