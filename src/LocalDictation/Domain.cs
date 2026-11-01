@@ -23,6 +23,17 @@ namespace LocalDictation
         public bool Whole { get; set; } = true;
         public bool CaseSensitive { get; set; }
     }
+    // One physical microphone in the priority list; Windows may expose it through several endpoint ids.
+    public sealed class MicrophoneEntry
+    {
+        public string Key { get; set; } = "";
+        public List<string> Ids { get; set; } = new List<string>();
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Device { get; set; } = "";
+        public string Kind { get; set; } = "";
+        public string Connection { get; set; } = "";
+    }
     public sealed class Settings
     {
         public int Version { get; set; } = 2;
@@ -32,6 +43,7 @@ namespace LocalDictation
         public bool AutomaticPowerModel { get; set; }
         public int WhisperIdleMinutes { get; set; } = 5;
         public string Microphone { get; set; } = "";
+        public List<MicrophoneEntry> Microphones { get; set; } = new List<MicrophoneEntry>();
         public string Anchor { get; set; } = "bottom-center";
         public string Monitor { get; set; } = "";
         public string Hotkey { get; set; } = HotkeyInput.Binding;

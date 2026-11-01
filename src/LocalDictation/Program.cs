@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -29,8 +30,9 @@ namespace LocalDictation
                 try { powerMonitor = new PowerModeMonitor(overlay); activePowerScheme = powerMonitor.ActiveScheme; powerPersonality = powerMonitor.Personality; powerMonitor.Changed += QueuePowerRoute; } catch (Exception ex) { Storage.Log("power monitor: " + ex.Message); }
                 tray = new Forms.NotifyIcon { Visible = true, Text = "Local Dictation", Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath) }; tray.MouseClick += (s, x) => { if (x.Button == Forms.MouseButtons.Right) ShowMenu(); else if (x.Button == Forms.MouseButtons.Left) { if(main.IsVisible && main.WindowState != WindowState.Minimized)main.Hide();else ShowMain(); } };
                 bool hotkeyProbe = false; hotkey = new GlobalHotkey(settings.HoldMs, Array.IndexOf(e.Args, "--allow-injected-hotkey") >= 0) { Binding = settings.Hotkey }; hotkey.StartRequested += () => { hotkeyProbe = !busy; StartDictation(); }; hotkey.ProbeCancelled += () => { if (hotkeyProbe && recording) CancelDictation(); hotkeyProbe = false; }; hotkey.StopRequested += StopDictation; hotkey.CancelRequested += CancelDictation; hotkey.CorrectionRequested += BeginCorrection;
-                audio = new AudioCapture(settings.Microphone); audio.Levels += x => overlay.SetLevels(x); audio.Error += CaptureError; audio.LimitReached += () => {main.SetStatus("Die Aufnahme ist sehr lang und wird jetzt verarbeitet.");StopDictation();}; audio.Interrupted += Interrupted;
-                main.MicrophoneChanged += x => audio.Select(x); main.RetryRequested += () => { if (!busy) RestartWorker(settings.Engine); };
+                SynchronizeMicrophones(); audio = new AudioCapture(() => settings.Microphones); audio.Levels += x => overlay.SetLevels(x); audio.Error += CaptureError; audio.LimitReached += () => {main.SetStatus("Die Aufnahme ist sehr lang und wird jetzt verarbeitet.");StopDictation();}; audio.Interrupted += Interrupted;
+                main.ActiveMicrophone = audio.CurrentId; audio.Switched += x => { main.ActiveMicrophone = x; main.RefreshMicrophones(); }; audio.DevicesChanged += () => main.RefreshMicrophones(SynchronizeMicrophones());
+                main.MicrophonesChanged += () => Dispatcher.BeginInvoke(new Action(() => audio.Reevaluate()), DispatcherPriority.Background); main.RetryRequested += () => { if (!busy) RestartWorker(settings.Engine); };
                 retentionCleanup = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) }; retentionCleanup.Tick += (s, x) => RetainedAudioStore.Cleanup(Storage.DataDir, DateTime.UtcNow); retentionCleanup.Start();
                 Microsoft.Win32.SystemEvents.UserPreferenceChanged += SystemChanged;
                 if (settings.AutomaticPowerModel) ApplyPowerRoute(false); if (!settings.OverlayVisible && Array.IndexOf(e.Args, "--autostart") < 0) main.Show(); RestartWorker(settings.Engine);
@@ -39,6 +41,7 @@ namespace LocalDictation
         }
         void SystemChanged(object s, Microsoft.Win32.UserPreferenceChangedEventArgs e) { Dispatcher.BeginInvoke(new Action(() => { if (settings.Theme == "system") { main.RefreshTheme(); overlay.ApplyTheme(settings.Theme); } overlay.Place(settings.Anchor, settings.Monitor); })); }
         void Save() { if (settings != null) Storage.SaveSettings(settings); }
+        List<MicrophoneInfo> SynchronizeMicrophones() { try { var found = MicrophoneCatalog.Scan(); if (MicrophonePriority.Synchronize(settings, found)) Save(); return found; } catch (Exception ex) { Storage.Log("microphones: " + ex.Message); return null; } }
         void ApplySettings(string mode) { Save(); if (hotkey != null) { hotkey.Binding = settings.Hotkey; hotkey.HoldMilliseconds = settings.HoldMs; } if (overlay != null) { overlay.ApplyTheme(mode); overlay.Place(settings.Anchor, settings.Monitor); if (!busy && overlay.State == AppState.Idle) { if (settings.OverlayVisible) overlay.Show(); else overlay.Hide(); } } if (settings.AutomaticPowerModel) ApplyPowerRoute(true); else { pendingPowerRoute = false; powerDebounce?.Stop(); } ApplyWhisperIdlePolicy(); }
         void QueuePowerRoute(Guid scheme, Guid? personality)
         {

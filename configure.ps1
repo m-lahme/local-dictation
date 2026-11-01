@@ -61,6 +61,13 @@ if ($changedKeys.Count -gt 0) {
     }
     if ($settings.Engine -eq 'whisper') { $settings.Device = 'gpu' }
     else { $settings.Engine = 'parakeet'; $settings.Device = 'cpu' }
+    if ($Microphone) {
+        # The app uses the first connected entry of the priority list; -Microphone moves that endpoint to the top.
+        $entries = @($settings.Microphones | Where-Object { $_ })
+        $entry = $entries | Where-Object { $_.Ids -contains $Microphone } | Select-Object -First 1
+        if (-not $entry) { $entry = [pscustomobject]@{ Key = $Microphone; Ids = @($Microphone); Name = ''; Description = ''; Device = ''; Kind = ''; Connection = '' } }
+        $settings | Add-Member -NotePropertyName Microphones -NotePropertyValue (@($entry) + @($entries | Where-Object { $_ -ne $entry })) -Force
+    }
 
     New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
     $temporary = "$settingsPath.new"

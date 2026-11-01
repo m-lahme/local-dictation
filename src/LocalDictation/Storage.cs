@@ -37,7 +37,7 @@ namespace LocalDictation
             if (result.Engine != "whisper" && result.Engine != "parakeet") result.Engine = "parakeet";
             ModelSelection.Normalize(result);
             if (!Enum.IsDefined(typeof(OutputMode), result.Output)) result.Output = OutputMode.Insert;
-            result.Rules = result.Rules ?? new List<ReplacementRule>(); result.HoldMs = Math.Clamp(result.HoldMs, 200, 1000);
+            result.Rules = result.Rules ?? new List<ReplacementRule>(); result.Microphones = (result.Microphones ?? new List<MicrophoneEntry>()).Where(x => x != null && x.Ids != null && x.Ids.Count > 0).ToList(); result.HoldMs = Math.Clamp(result.HoldMs, 200, 1000);
             result.TypingWpm = Math.Clamp(result.TypingWpm, 10, 200);
             if (result.Hotkey != "ctrl-win" && result.Hotkey != "ctrl-shift-space") result.Hotkey = HotkeyInput.Binding;
             if (!new[] { 0, 3, 5, 10 }.Contains(result.WhisperIdleMinutes)) result.WhisperIdleMinutes = 5;

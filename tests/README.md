@@ -12,4 +12,6 @@ The optional `-Visual` switch opens WPF windows and writes render images and gen
 
 The audit executable also exposes explicit integration modes: `--clipboard-test`, `--clipboard-test-disposable`, `--meter-test`, `--capture-test` and `--input-test`. They access real hardware, windows or the clipboard; they are not part of the default run and some retain assumptions from earlier hardware investigations. Inspect the corresponding test before using it, and pass an isolated data directory as the second argument.
 
+`--history-benchmark` opens the history page several times with the `history.json` from the given data directory, scrolls through it and prints the timings. Copy a real history into a separate directory to measure realistic sizes.
+
 `audio/` contains synthetic speech, generated from the fixed sentences in `create_test_audio.ps1`, not user recordings. Regenerating these clips requires Windows PowerShell with System.Speech; output depends on the installed speech voice. Model inference and physical hotkeys remain separate hardware checks.

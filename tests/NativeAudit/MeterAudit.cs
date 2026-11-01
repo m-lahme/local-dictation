@@ -21,7 +21,7 @@ internal static class MeterAudit
         Check(split>=8,"frame-synchronous rise has at least 8 frames");Check(frames.Take(split).Select(x=>Math.Round(x.h,2)).Distinct().Count()>=8,"rise has distinct intermediate heights");Check(frames.Take(split).Max(x=>x.h)>13,"meter reaches speech peak");Check(frames.Last().h<5,"meter releases toward silence");Check(frames.Zip(frames.Skip(1),(a,b)=>Math.Abs(a.h-b.h)).Max()<6,"no abrupt height jumps");
         var intervals=frames.Zip(frames.Skip(1),(a,b)=>b.t-a.t).Order().ToArray();log.Add("MEASURE frames="+frames.Count+" median-frame-ms="+intervals[intervals.Length/2]);
         File.WriteAllLines(Path.Combine(data,"meter-frames.csv"),new[]{"milliseconds,height"}.Concat(frames.Select(x=>FormattableString.Invariant($"{x.t-frames[0].t:F3},{x.h:F4}"))));
-        int packets=0;using(var audio=new AudioCapture("")){audio.Levels+=x=>{packets++;overlay.SetLevels(x);};Pump(600);Check(audio.Ready,"live microphone ready");audio.Start();Pump(1000);audio.Cancel();Check(packets>5,"live microphone drives frame-smoothed overlay");}
+        int packets=0;using(var audio=new AudioCapture()){audio.Levels+=x=>{packets++;overlay.SetLevels(x);};Pump(600);Check(audio.Ready,"live microphone ready");audio.Start();Pump(1000);audio.Cancel();Check(packets>5,"live microphone drives frame-smoothed overlay");}
         overlay.Close();app.Shutdown();File.WriteAllLines(Path.Combine(data,"meter-result.txt"),log);foreach(var line in log)Console.WriteLine(line);
     }
 }

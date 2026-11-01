@@ -7,6 +7,8 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using Forms = System.Windows.Forms;
 
 namespace LocalDictation
@@ -16,8 +18,8 @@ namespace LocalDictation
         readonly Settings settings; readonly string dataDir; readonly Action<string> changed, engineChanged; readonly Action<HistoryEntry,string> retranscribe;
         Grid root, content; StackPanel nav; TextBlock status; string page = "history", category = "model"; string statusText = "Wird gestartet …";
         string dictionaryQuery="", historyQuery="";
-        event Action DictionaryDragEnded;
-        public ComboBox FirstSelector; public bool Busy; public event Action RetryRequested; public event Action<string> MicrophoneChanged;
+        Action renderMicrophones, renderRules, pendingRender; bool rowDragging; object focusedRow; List<MicrophoneInfo> microphoneScan = new List<MicrophoneInfo>();
+        public ComboBox FirstSelector; public bool Busy; public event Action RetryRequested; public event Action MicrophonesChanged; public string ActiveMicrophone = "";
         Brush R(string name) => (Brush)Resources[name];
         public MainWindow(Settings s, string dir, Action<string> onChange, Action<string> onEngine, Action<HistoryEntry,string> onRetranscribe=null) { settings = s; dataDir = dir; changed = onChange; engineChanged = onEngine; retranscribe=onRetranscribe; Title = "Local Dictation"; Width = 1040; Height = 740; MinWidth = 800; MinHeight = 580; WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = new FontFamily("Segoe UI"); FontSize = 14; Theme.Apply(this, s.Theme); SourceInitialized += (a, b) => WindowTheme.Apply(this, settings.Theme); Build(); ShowHistory(); }
         TextBlock T(string text, double size = 14, string color = "Text") => new TextBlock { Text = text, FontSize = size, Foreground = R(color), TextWrapping = TextWrapping.Wrap };
@@ -39,14 +41,14 @@ namespace LocalDictation
         public void SetStatus(string value) { statusText = value; if (status != null) status.Text = value; }
         public void RefreshTheme() { Theme.Apply(this, settings.Theme); WindowTheme.Apply(this, settings.Theme); Build(); if (page == "dictionary") ShowDictionary(); else if(page=="statistics")ShowStatistics(); else if (page == "settings") SettingsPage(category); else ShowHistory(); }
         public void AddHistory(HistoryEntry entry) { var list = Storage.LoadHistory(dataDir); list.Insert(0, entry); Storage.Write(Path.Combine(dataDir, "history.json"), list); if (IsVisible && page == "history") ShowHistory(); }
-        ScrollViewer Scroll(UIElement child) { var scroll=new ScrollViewer{Content=child,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,CanContentScroll=false,Padding=new Thickness(0,0,5,0)};scroll.Resources[SystemParameters.VerticalScrollBarWidthKey]=7.0;scroll.PreviewMouseWheel+=(s,e)=>{scroll.ScrollToVerticalOffset(scroll.VerticalOffset-e.Delta*.25);e.Handled=true;};return scroll; }
-        StackPanel DensePage(string title,string subtitle,out StackPanel toolbar) {
+        ScrollViewer Scroll(UIElement child) => Smooth(new ScrollViewer{Content=child,CanContentScroll=false});
+        ScrollViewer Smooth(ScrollViewer scroll) { scroll.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;scroll.HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled;scroll.Padding=new Thickness(0,0,5,0);scroll.Resources[SystemParameters.VerticalScrollBarWidthKey]=7.0;scroll.PreviewMouseWheel+=(s,e)=>{scroll.ScrollToVerticalOffset(scroll.VerticalOffset-e.Delta*.25);e.Handled=true;};return scroll; }
+        StackPanel DensePage(string title,string subtitle,out StackPanel toolbar) {var rows=new StackPanel();DensePage(title,subtitle,out toolbar,Scroll(rows));return rows;}
+        void DensePage(string title,string subtitle,out StackPanel toolbar,UIElement body) {
             Navigation();content.Children.Clear();var grid=new Grid();grid.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});grid.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});grid.RowDefinitions.Add(new RowDefinition());
             var heading=new StackPanel{Margin=new Thickness(0,0,0,12)};heading.Children.Add(T(title,24));var hint=T(subtitle,12,"Muted");hint.Margin=new Thickness(0,4,0,0);heading.Children.Add(hint);grid.Children.Add(heading);
-            toolbar=new StackPanel{Margin=new Thickness(0,0,0,10)};Grid.SetRow(toolbar,1);grid.Children.Add(toolbar);var rows=new StackPanel();var scroll=Scroll(rows);scroll.AllowDrop=true;var dragScroll=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromMilliseconds(35)};double dragSpeed=0;dragScroll.Tick+=(s,e)=>scroll.ScrollToVerticalOffset(scroll.VerticalOffset+dragSpeed);
-            scroll.PreviewDragOver+=(s,e)=>{if(!e.Data.GetDataPresent(typeof(ReplacementRule)))return;double y=e.GetPosition(scroll).Y;dragSpeed=y<42?-Math.Max(2,(42-y)*.45):y>scroll.ActualHeight-42?Math.Max(2,(y-scroll.ActualHeight+42)*.45):0;if(dragSpeed!=0)dragScroll.Start();else dragScroll.Stop();};
-            scroll.DragLeave+=(s,e)=>{var q=e.GetPosition(scroll);if(q.X<0||q.Y<0||q.X>scroll.ActualWidth||q.Y>scroll.ActualHeight)dragScroll.Stop();};scroll.PreviewDrop+=(s,e)=>dragScroll.Stop();Action stopDrag=()=>dragScroll.Stop();DictionaryDragEnded+=stopDrag;scroll.Unloaded+=(s,e)=>{dragScroll.Stop();DictionaryDragEnded-=stopDrag;};
-            scroll.QueryContinueDrag+=(s,e)=>{if(e.EscapePressed||e.Action!=DragAction.Continue)dragScroll.Stop();};Grid.SetRow(scroll,2);grid.Children.Add(scroll);content.Children.Add(grid);return rows;
+            toolbar=new StackPanel{Margin=new Thickness(0,0,0,10)};Grid.SetRow(toolbar,1);grid.Children.Add(toolbar);
+            Grid.SetRow(body,2);grid.Children.Add(body);content.Children.Add(grid);
         }
         TextBox Search(StackPanel parent,string hint,string initial) {
             var host=new Grid{Height=30,Width=320,HorizontalAlignment=HorizontalAlignment.Left,Margin=new Thickness(0,0,0,5)};var box=new TextBox{Text=initial,Padding=new Thickness(28,5,8,4),FontSize=13};AutomationProperties.SetName(box,hint);box.ToolTip=hint;host.Children.Add(box);
@@ -56,51 +58,43 @@ namespace LocalDictation
         Button IconButton(string glyph,string label,Action action) {var button=B(glyph,action);button.FontFamily=new FontFamily("Segoe Fluent Icons");button.FontSize=13;button.Width=26;button.Height=26;button.Padding=new Thickness(0);button.Margin=new Thickness(1,0,0,0);button.BorderThickness=new Thickness(0);button.Background=Brushes.Transparent;button.ToolTip=label;AutomationProperties.SetName(button,label);return button;}
         public void ShowHistory()
         {
-            page="history";var list=DensePage("Verlauf","Diktate der letzten 30 Tage · Aufnahmen bleiben eine Stunde verfügbar",out var toolbar);var search=Search(toolbar,"Verlauf durchsuchen …",historyQuery);var entries=Storage.LoadHistory(dataDir);
+            page="history";var rows=new VirtualRows<HistoryEntry>(HistoryRow);Smooth(rows.Scroll);var empty=T("",13,"Muted");var body=new Grid();body.Children.Add(rows);body.Children.Add(empty);DensePage("Verlauf","Diktate der letzten 30 Tage · Aufnahmen bleiben eine Stunde verfügbar",out var toolbar,body);var search=Search(toolbar,"Verlauf durchsuchen …",historyQuery);var entries=Storage.LoadHistory(dataDir);
             Action render=()=>
             {
-                historyQuery=search.Text;list.Children.Clear();
-                foreach(var h in entries.Where(x=>x.Text.Contains(search.Text,StringComparison.OrdinalIgnoreCase)||x.Variants.Any(v=>v.Text.Contains(search.Text,StringComparison.OrdinalIgnoreCase))))
-                {
-                    bool problem=h.Status!="complete";var stack=new StackPanel();var head=new DockPanel{LastChildFill=true};var body=new TextBox{Text=h.Text,IsReadOnly=true,TextWrapping=TextWrapping.Wrap,BorderThickness=new Thickness(0),Background=Brushes.Transparent,Foreground=R("Text"),FontSize=13,Padding=new Thickness(0),Margin=new Thickness(0,2,0,1)};
-                    var copy=IconButton("\uE8C8","Diktat kopieren",()=>Clipboard.SetText(body.Text));DockPanel.SetDock(copy,Dock.Right);head.Children.Add(copy);
-                    bool audioAvailable=!String.IsNullOrWhiteSpace(h.AudioFile)&&h.AudioExpiresAtUtc>DateTime.UtcNow;
-                    var variants=h.Variants.Count>0?h.Variants:new List<TranscriptVariant>{new TranscriptVariant{Engine=h.Engine,RawText=h.RawText,Text=h.Text,CreatedAtUtc=h.Time.ToUniversalTime(),Confidence=h.Confidence,ReviewRecommended=h.ReviewRecommended}};
-                    if(audioAvailable&&retranscribe!=null){Button retryButton=null;retryButton=IconButton("\uE72C","Erneut transkribieren",()=>{var commands=variants.Select((v,i)=>new ApplicationMenus.Command{Title=SidebarStatus.ModelName(v.Engine)+(i==variants.Count-1?" · aktuelle Fassung":" · Fassung "+(i+1)),Glyph=i==variants.Count-1?"\uE73E":"\uE81C",Action=()=>body.Text=v.Text}).ToList();var retryMenu=ApplicationMenus.CreateRetry(settings,commands,engine=>retranscribe?.Invoke(h,engine));retryMenu.PlacementTarget=retryButton;retryMenu.IsOpen=true;});DockPanel.SetDock(retryButton,Dock.Right);head.Children.Add(retryButton);}
-                    var meta=T(h.Time.ToString("dd.MM. · HH:mm")+"  ·  "+(h.DurationMs/1000.0).ToString("0.0")+" s  ·  "+SidebarStatus.ModelName(h.Engine)+(audioAvailable?"  ·  Audio noch "+Math.Max(1,(int)Math.Ceiling((h.AudioExpiresAtUtc.Value-DateTime.UtcNow).TotalMinutes))+" Min.":""),11,"Muted");meta.VerticalAlignment=VerticalAlignment.Center;head.Children.Add(meta);stack.Children.Add(head);stack.Children.Add(body);
-                    if(h.ReviewRecommended){var note=T("Bitte kurz prüfen",11,"Muted");note.FontWeight=FontWeights.SemiBold;stack.Children.Add(new Border{Child=note,Background=new SolidColorBrush(Color.FromArgb(32,245,174,66)),CornerRadius=new CornerRadius(5),Padding=new Thickness(7,4,7,4),Margin=new Thickness(0,4,0,0),HorizontalAlignment=HorizontalAlignment.Left});}
-                    if(problem){var note=T(h.Status=="incomplete"?"Aufnahme unterbrochen · Text wurde nicht eingefügt":"Text wurde nicht eingefügt",11,"Accent");note.FontWeight=FontWeights.SemiBold;stack.Children.Add(new Border{Child=note,Background=new SolidColorBrush(Color.FromArgb(24,224,91,91)),CornerRadius=new CornerRadius(5),Padding=new Thickness(7,4,7,4),Margin=new Thickness(0,4,0,0),HorizontalAlignment=HorizontalAlignment.Left});}
-                    list.Children.Add(new Border{Child=stack,Background=R("Surface"),BorderBrush=R("Line"),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(7),Padding=new Thickness(10,5,8,7),Margin=new Thickness(0,0,0,6)});
-                }
-                if(list.Children.Count==0)list.Children.Add(T(entries.Count==0?"Noch keine Diktate. Mit deinem Hotkey starten.":"Keine passenden Diktate.",13,"Muted"));
+                historyQuery=search.Text;var shown=entries.Where(x=>x.Text.Contains(search.Text,StringComparison.OrdinalIgnoreCase)||x.Variants.Any(v=>v.Text.Contains(search.Text,StringComparison.OrdinalIgnoreCase))).ToList();rows.ItemsSource=shown;rows.Scroll.ScrollToTop();
+                empty.Text=entries.Count==0?"Noch keine Diktate. Mit deinem Hotkey starten.":"Keine passenden Diktate.";empty.Visibility=shown.Count==0?Visibility.Visible:Visibility.Collapsed;
             };search.TextChanged+=(s,e)=>render();render();
+        }
+        FrameworkElement HistoryRow(HistoryEntry h)
+        {
+            bool problem=h.Status!="complete";var stack=new StackPanel();var head=new DockPanel{LastChildFill=true};var body=new TextBox{Text=h.Text,IsReadOnly=true,TextWrapping=TextWrapping.Wrap,BorderThickness=new Thickness(0),Background=Brushes.Transparent,Foreground=R("Text"),FontSize=13,Padding=new Thickness(0),Margin=new Thickness(0,2,0,1)};
+            var copy=IconButton("\uE8C8","Diktat kopieren",()=>Clipboard.SetText(body.Text));DockPanel.SetDock(copy,Dock.Right);head.Children.Add(copy);
+            bool audioAvailable=!String.IsNullOrWhiteSpace(h.AudioFile)&&h.AudioExpiresAtUtc>DateTime.UtcNow;
+            var variants=h.Variants.Count>0?h.Variants:new List<TranscriptVariant>{new TranscriptVariant{Engine=h.Engine,RawText=h.RawText,Text=h.Text,CreatedAtUtc=h.Time.ToUniversalTime(),Confidence=h.Confidence,ReviewRecommended=h.ReviewRecommended}};
+            if(audioAvailable&&retranscribe!=null){Button retryButton=null;retryButton=IconButton("\uE72C","Erneut transkribieren",()=>{var commands=variants.Select((v,i)=>new ApplicationMenus.Command{Title=SidebarStatus.ModelName(v.Engine)+(i==variants.Count-1?" · aktuelle Fassung":" · Fassung "+(i+1)),Glyph=i==variants.Count-1?"\uE73E":"\uE81C",Action=()=>body.Text=v.Text}).ToList();var retryMenu=ApplicationMenus.CreateRetry(settings,commands,engine=>retranscribe?.Invoke(h,engine));retryMenu.PlacementTarget=retryButton;retryMenu.IsOpen=true;});DockPanel.SetDock(retryButton,Dock.Right);head.Children.Add(retryButton);}
+            var meta=T(h.Time.ToString("dd.MM. · HH:mm")+"  ·  "+(h.DurationMs/1000.0).ToString("0.0")+" s  ·  "+SidebarStatus.ModelName(h.Engine)+(audioAvailable?"  ·  Audio noch "+Math.Max(1,(int)Math.Ceiling((h.AudioExpiresAtUtc.Value-DateTime.UtcNow).TotalMinutes))+" Min.":""),11,"Muted");meta.VerticalAlignment=VerticalAlignment.Center;head.Children.Add(meta);stack.Children.Add(head);stack.Children.Add(body);
+            if(h.ReviewRecommended){var note=T("Bitte kurz prüfen",11,"Muted");note.FontWeight=FontWeights.SemiBold;stack.Children.Add(new Border{Child=note,Background=new SolidColorBrush(Color.FromArgb(32,245,174,66)),CornerRadius=new CornerRadius(5),Padding=new Thickness(7,4,7,4),Margin=new Thickness(0,4,0,0),HorizontalAlignment=HorizontalAlignment.Left});}
+            if(problem){var note=T(h.Status=="incomplete"?"Aufnahme unterbrochen · Text wurde nicht eingefügt":"Text wurde nicht eingefügt",11,"Accent");note.FontWeight=FontWeights.SemiBold;stack.Children.Add(new Border{Child=note,Background=new SolidColorBrush(Color.FromArgb(24,224,91,91)),CornerRadius=new CornerRadius(5),Padding=new Thickness(7,4,7,4),Margin=new Thickness(0,4,0,0),HorizontalAlignment=HorizontalAlignment.Left});}
+            return new Border{Child=stack,Background=R("Surface"),BorderBrush=R("Line"),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(7),Padding=new Thickness(10,5,8,7),Margin=new Thickness(0,0,0,6)};
         }
         public void ShowDictionary() {
             page="dictionary";var list=DensePage("Wörterbuch","Ersetzungen werden von oben nach unten angewendet.",out var toolbar);var search=Search(toolbar,"Wörterbuch durchsuchen …",dictionaryQuery);var actions=new DockPanel();var count=T(settings.Rules.Count+" Regeln",11,"Muted");count.VerticalAlignment=VerticalAlignment.Center;actions.Children.Add(count);var add=B("+ Neue Regel",()=>{if(settings.Rules.Count>=1000)throw new InvalidOperationException("Maximal 1.000 Regeln erlaubt.");settings.Rules.Add(new ReplacementRule());dictionaryQuery="";Save();ShowDictionary();});add.Padding=new Thickness(8,4,8,4);add.Margin=new Thickness(10,0,0,0);add.HorizontalAlignment=HorizontalAlignment.Right;actions.Children.Add(add);toolbar.Children.Add(actions);
-            Action render=()=>{dictionaryQuery=search.Text;list.Children.Clear();for(int i=0;i<settings.Rules.Count;i++){var r=settings.Rules[i];if(r.Source.Contains(dictionaryQuery,StringComparison.OrdinalIgnoreCase)||r.Target.Contains(dictionaryQuery,StringComparison.OrdinalIgnoreCase))Rule(list,i);}if(list.Children.Count==0)list.Children.Add(T("Keine passenden Regeln.",13,"Muted"));};search.TextChanged+=(s,e)=>render();render();
+            renderRules=()=>{dictionaryQuery=search.Text;list.Children.Clear();for(int i=0;i<settings.Rules.Count;i++){var r=settings.Rules[i];if(r.Source.Contains(dictionaryQuery,StringComparison.OrdinalIgnoreCase)||r.Target.Contains(dictionaryQuery,StringComparison.OrdinalIgnoreCase))Rule(list,i);}if(list.Children.Count==0)list.Children.Add(T("Keine passenden Regeln.",13,"Muted"));};search.TextChanged+=(s,e)=>renderRules();renderRules();
         }
         void Rule(StackPanel p,int index) {
-            var r=settings.Rules[index];var row=new Grid{Height=32,Margin=new Thickness(0,0,0,2)};
+            var r=settings.Rules[index];var row=new Grid{Height=30};
             foreach(double width in new[]{26.0,-1,20,-1,53,39,26})row.ColumnDefinitions.Add(new ColumnDefinition{Width=width<0?new GridLength(1,GridUnitType.Star):new GridLength(width)});
             void Put(UIElement child,int column){Grid.SetColumn(child,column);row.Children.Add(child);}
-            var handle=new TextBlock{Text="\uE784",FontFamily=new FontFamily("Segoe Fluent Icons"),FontSize=15,Foreground=R("Muted"),VerticalAlignment=VerticalAlignment.Stretch,TextAlignment=TextAlignment.Center,Padding=new Thickness(0,8,0,0),Background=Brushes.Transparent,Cursor=System.Windows.Input.Cursors.SizeAll,ToolTip="Regel "+(index+1)+" ziehen · Alt+Pfeil zum Verschieben",Focusable=true};
-            AutomationProperties.SetName(handle,"Regel "+(index+1)+" verschieben");Point origin=new Point();bool armed=false;
-            handle.MouseLeftButtonDown+=(s,e)=>{origin=e.GetPosition(handle);armed=true;handle.Focus();e.Handled=true;};
-            handle.MouseLeftButtonUp+=(s,e)=>armed=false;
-            handle.MouseMove+=(s,e)=>{if(!armed||e.LeftButton!=System.Windows.Input.MouseButtonState.Pressed)return;var q=e.GetPosition(handle);if(Math.Abs(q.X-origin.X)<SystemParameters.MinimumHorizontalDragDistance&&Math.Abs(q.Y-origin.Y)<SystemParameters.MinimumVerticalDragDistance)return;armed=false;try{DragDrop.DoDragDrop(handle,new DataObject(typeof(ReplacementRule),r),DragDropEffects.Move);}finally{DictionaryDragEnded?.Invoke();}};
-            handle.KeyDown+=(s,e)=>{if(System.Windows.Input.Keyboard.Modifiers!=System.Windows.Input.ModifierKeys.Alt)return;if(e.Key==System.Windows.Input.Key.Up||e.Key==System.Windows.Input.Key.Down){Move(settings.Rules.IndexOf(r),e.Key==System.Windows.Input.Key.Up?-1:1);e.Handled=true;}};
+            var handle=Grip("Regel "+(index+1)+" verschieben",6);
             Put(handle,0);var arrow=T("→",12,"Muted");arrow.HorizontalAlignment=HorizontalAlignment.Center;arrow.VerticalAlignment=VerticalAlignment.Center;Put(arrow,2);
             for(int n=0;n<2;n++){bool source=n==0;var box=new TextBox{Text=source?r.Source:r.Target,Height=28,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,Padding=new Thickness(6,4,6,3),FontSize=13,ToolTip=source?"Ersetzen":"Durch"};AutomationProperties.SetName(box,(source?"Ersetzen ":"Durch ")+(index+1));box.TextChanged+=(s,e)=>{if(source)r.Source=box.Text;else r.Target=box.Text;Storage.SaveSettings(settings);};Put(box,n==0?1:3);}
             var mode=B(r.Whole?"Wort":"Teil",()=>{});mode.Width=48;mode.Height=26;mode.Padding=new Thickness(2);mode.Margin=new Thickness(4,0,0,0);mode.FontSize=11;mode.ToolTip="Ganzes Wort oder Wortteil";mode.Click+=(s,e)=>{r.Whole=!r.Whole;mode.Content=r.Whole?"Wort":"Teil";Save();};Put(mode,4);
             var exact=B("Aa",()=>{});exact.Width=31;exact.Height=26;exact.Margin=new Thickness(4,0,0,0);exact.Padding=new Thickness(0);exact.FontSize=12;exact.ToolTip="Groß-/Kleinschreibung beachten";AutomationProperties.SetName(exact,"Groß-/Kleinschreibung beachten "+(index+1));void CaseStyle(){exact.Background=r.CaseSensitive?new SolidColorBrush(Color.FromArgb(55,224,91,91)):Brushes.Transparent;exact.BorderThickness=r.CaseSensitive?new Thickness(1):new Thickness(0);}CaseStyle();exact.Click+=(s,e)=>{r.CaseSensitive=!r.CaseSensitive;CaseStyle();Save();};Put(exact,5);
             Put(IconButton("\uE74D","Regel "+(index+1)+" löschen",()=>{settings.Rules.Remove(r);Save();ShowDictionary();}),6);
-            var host=new Border{Child=row,BorderBrush=new SolidColorBrush(Theme.Accent),BorderThickness=new Thickness(0),AllowDrop=true,Tag=r};
-            host.PreviewDragOver+=(s,e)=>{if(!e.Data.GetDataPresent(typeof(ReplacementRule))){e.Effects=DragDropEffects.None;return;}bool after=e.GetPosition(host).Y>host.ActualHeight/2;host.BorderThickness=new Thickness(0,after?0:2,0,after?2:0);e.Effects=DragDropEffects.Move;e.Handled=true;};
-            host.DragLeave+=(s,e)=>host.BorderThickness=new Thickness(0);
-            host.PreviewDrop+=(s,e)=>{host.BorderThickness=new Thickness(0);if(e.Data.GetData(typeof(ReplacementRule)) is ReplacementRule moved){RuleOrder.Move(settings.Rules,moved,r,e.GetPosition(host).Y>host.ActualHeight/2);Save();ShowDictionary();e.Handled=true;}};
+            var card=new Border{Child=row,Background=Brushes.Transparent,CornerRadius=new CornerRadius(6),BorderThickness=new Thickness(1),BorderBrush=Brushes.Transparent};var host=new Border{Child=card,Margin=new Thickness(0,0,0,2)};
+            Reorderable(p,host,card,handle,r,settings.Rules,Brushes.Transparent,()=>{Storage.SaveSettings(settings);renderRules?.Invoke();});
             p.Children.Add(host);
         }
-        void Move(int i, int d) { int j = i + d; if (j < 0 || j >= settings.Rules.Count) return; var r = settings.Rules[i]; settings.Rules.RemoveAt(i); settings.Rules.Insert(j, r); Save(); ShowDictionary(); }
         public void ShowCorrection(string original,string corrected,CorrectionAnalysis analysis)
         {
             page="correction";var p=Page("Korrektur lernen","Prüfe die Vorschläge. Erst mit dem Button werden Regeln ins Wörterbuch übernommen.");
@@ -118,7 +112,8 @@ namespace LocalDictation
             var speed=new StackPanel();speed.Children.Add(T("Deine Tippgeschwindigkeit",16));var line=new WrapPanel{Margin=new Thickness(0,9,0,0)};line.Children.Add(T("Für die Schätzung:",13,"Muted"));var wpm=new TextBox{Text=settings.TypingWpm.ToString(),Width=58,Margin=new Thickness(8,0,6,0),Padding=new Thickness(5,3,5,3)};line.Children.Add(wpm);line.Children.Add(T("Wörter pro Minute",13,"Muted"));speed.Children.Add(line);wpm.LostFocus+=(s,e)=>{if(int.TryParse(wpm.Text,out int value)){settings.TypingWpm=Math.Clamp(value,10,200);Save();ShowStatistics();}else wpm.Text=settings.TypingWpm.ToString();};
             var prompt="Schnelles Diktieren spart Zeit, wenn Gedanken direkt und klar in Text verwandelt werden.";var hint=T("Tippe diesen Satz. Die Messung beginnt mit dem ersten Zeichen:",12,"Muted");hint.Margin=new Thickness(0,14,0,5);speed.Children.Add(hint);speed.Children.Add(T(prompt,13));var test=new TextBox{Margin=new Thickness(0,8,0,0),Padding=new Thickness(8),MinHeight=36};speed.Children.Add(test);var result=T("",12,"Muted");result.Margin=new Thickness(0,6,0,0);speed.Children.Add(result);var watch=new Stopwatch();test.PreviewTextInput+=(s,e)=>{if(!watch.IsRunning)watch.Start();};DataObject.AddPastingHandler(test,(s,e)=>e.CancelCommand());test.TextChanged+=(s,e)=>{if(test.Text==prompt&&watch.IsRunning){watch.Stop();settings.TypingWpm=Math.Clamp((int)Math.Round(UsageStatistics.CalculateTypingWordsPerMinute(prompt.Length,watch.Elapsed)),10,200);Save();result.Text="Gemessen: "+settings.TypingWpm+" Wörter pro Minute";}};p.Children.Add(Card(speed));
         }
-        public void ShowSettings() { page = "settings"; SettingsPage(category); }
+        public void ShowSettings() { ShowSettings(category); }
+        public void ShowSettings(string key) { page = "settings"; SettingsPage(key); }
         void SettingsPage(string key)
         {
             category = key; page = "settings"; var p = Page(key == "model" ? "Modelle" : key == "audio" ? "Audio und Hotkeys" : key == "output" ? "Textausgabe" : key == "appearance" ? "Darstellung" : "Allgemein", "Einstellungen werden automatisch gespeichert.");
@@ -134,7 +129,7 @@ namespace LocalDictation
             }
             else if (key == "audio")
             {
-                var inputs = AudioCapture.Inputs(); int selected = Math.Max(0, inputs.FindIndex(x => x.Key == settings.Microphone)); Select(p, "Mikrofon", "Das Audiogerät bleibt vorbereitet. Der WASAPI-Aufnahmestrom und die Windows-Mikrofonanzeige sind nur während eines Diktats aktiv.", inputs.Select(x => x.Value).ToArray(), selected, i => { if (Busy) return; settings.Microphone = inputs[i].Key; Save(); MicrophoneChanged?.Invoke(settings.Microphone); });
+                Microphones(p);
                 Select(p, "Tastenkombination", "Kurz drücken startet oder beendet ein Diktat. Halten bis über die Schwelle, dann loslassen, beendet Push-to-talk. Escape bricht Aufnahme und Transkription ab.", new[] { "Strg + Windows", "Strg + Umschalt + Leertaste" }, settings.Hotkey == "ctrl-win" ? 0 : 1, i => { settings.Hotkey = i == 0 ? "ctrl-win" : "ctrl-shift-space"; Save(); });
                 Info(p,"Korrekturen lernen","Korrigiere den zuletzt eingefügten Text, markiere ihn vollständig und tippe den Aufnahme-Hotkey zweimal schnell hintereinander. Die App schlägt anschließend editierbare Wörterbuchregeln vor.");
                 Select(p, "Halteschwelle", "Die Aufnahme beginnt mit dem Tastendruck.", new[] { "300 ms", "400 ms", "600 ms" }, settings.HoldMs == 300 ? 0 : settings.HoldMs == 600 ? 2 : 1, i => { settings.HoldMs = new[] { 300, 400, 600 }[i]; Save(); });
@@ -162,6 +157,92 @@ namespace LocalDictation
         }
         static readonly string[] Anchors = { "bottom-center", "bottom-left", "bottom-right", "top-center", "top-left", "top-right" };
         public void RefreshModelSettings() { if (page == "settings" && category == "model") SettingsPage("model"); }
+        public void RefreshMicrophones(List<MicrophoneInfo> found = null) { if (found != null) microphoneScan = found; if (page == "settings" && category == "audio") renderMicrophones?.Invoke(); }
+        void Microphones(StackPanel p)
+        {
+            var s = new StackPanel(); s.Children.Add(T("Mikrofone", 15)); var d = T("Verwendet wird das oberste verbundene Mikrofon. Ziehen ändert die Reihenfolge. Beim Anschließen oder Trennen wechselt die App im Hintergrund, nie während eines Diktats. Aufnahmestrom und Windows-Mikrofonanzeige sind nur beim Diktieren aktiv.", 12, "Muted"); d.Margin = new Thickness(0, 6, 0, 12); s.Children.Add(d);
+            var rows = new StackPanel(); s.Children.Add(rows); p.Children.Add(Card(s));
+            renderMicrophones = () =>
+            {
+                if (rowDragging) { pendingRender = renderMicrophones; return; }
+                rows.Children.Clear(); for (int i = 0; i < settings.Microphones.Count; i++) MicrophoneRow(rows, settings.Microphones[i], i);
+                if (rows.Children.Count == 0) rows.Children.Add(T("Noch kein Mikrofon erkannt.", 13, "Muted"));
+            };
+            try { microphoneScan = MicrophoneCatalog.Scan(); } catch (Exception ex) { Storage.Log("microphone list: " + ex.Message); }
+            renderMicrophones();
+        }
+        void MicrophoneRow(StackPanel p, MicrophoneEntry m, int index)
+        {
+            var live = microphoneScan.Where(x => m.Ids.Contains(x.Id)).ToList(); bool connected = live.Any(x => x.Active), used = ActiveMicrophone.Length > 0 && m.Ids.Contains(ActiveMicrophone), standard = live.Any(x => x.Active && x.IsDefault);
+            string state = used ? "Wird verwendet" : connected ? "Bereit" : live.Any(x => x.State == NAudio.CoreAudioApi.DeviceState.Unplugged) ? "Nicht eingesteckt" : live.Any(x => x.State == NAudio.CoreAudioApi.DeviceState.Disabled) ? "In Windows deaktiviert" : "Nicht verbunden";
+            string title = MicrophoneCatalog.Title(m); var row = new Grid { MinHeight = 48 };
+            foreach (double width in new[] { 26.0, 36, -1, 0, 30 }) row.ColumnDefinitions.Add(new ColumnDefinition { Width = width < 0 ? new GridLength(1, GridUnitType.Star) : width == 0 ? GridLength.Auto : new GridLength(width) });
+            void Put(UIElement child, int column) { Grid.SetColumn(child, column); row.Children.Add(child); }
+            var handle = Grip(title + ", Priorität " + (index + 1) + ", verschieben", 15);
+            Put(handle, 0);
+            var icon = new TextBlock { Text = MicrophoneCatalog.Glyph(m.Kind), FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 20, Foreground = used ? R("Accent") : R("Text"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Opacity = connected ? 1 : .5 }; Put(icon, 1);
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 10, 0), Opacity = connected ? 1 : .6 }; var name = T(title, 14); name.TextWrapping = TextWrapping.NoWrap; name.TextTrimming = TextTrimming.CharacterEllipsis; text.Children.Add(name);
+            var details = T(MicrophoneCatalog.Details(m) + (standard ? " · Windows-Standard" : ""), 12, "Muted"); details.Margin = new Thickness(0, 2, 0, 0); text.Children.Add(details); Put(text, 2);
+            var label = T(state, 11, used ? "Text" : "Muted"); if (used) label.FontWeight = FontWeights.SemiBold;
+            Put(new Border { Child = label, CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 2, 8, 3), VerticalAlignment = VerticalAlignment.Center, BorderThickness = new Thickness(1), BorderBrush = used ? R("Accent") : R("Line"), Background = used ? new SolidColorBrush(Color.FromArgb(40, 224, 91, 91)) : Brushes.Transparent }, 3);
+            if (!connected) Put(IconButton("", title + " aus der Liste entfernen", () => { settings.Microphones.Remove(m); Storage.SaveSettings(settings); renderMicrophones?.Invoke(); }), 4);
+            row.ToolTip = m.Name;
+            Brush rest = used ? R("SurfaceRaised") : Brushes.Transparent; var card = new Border { Child = row, Background = rest, CornerRadius = new CornerRadius(8), Padding = new Thickness(0, 2, 2, 2), BorderThickness = new Thickness(1), BorderBrush = Brushes.Transparent };
+            var host = new Border { Child = card, Margin = new Thickness(0, 0, 0, 3) };
+            Reorderable(p, host, card, handle, m, settings.Microphones, rest, MicrophonesReordered);
+            p.Children.Add(host);
+        }
+        TextBlock Grip(string name, double top) { var grip = new TextBlock { Text = "", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 16, Foreground = R("Muted"), VerticalAlignment = VerticalAlignment.Stretch, TextAlignment = TextAlignment.Center, Padding = new Thickness(0, top, 0, 0), Background = Brushes.Transparent, Cursor = System.Windows.Input.Cursors.SizeNS, ToolTip = "Ziehen · Alt+Pfeil zum Verschieben", Focusable = true }; AutomationProperties.SetName(grip, name); return grip; }
+        // Pointer-driven reordering: the grabbed row follows the cursor while the others slide aside to show where it will land.
+        void Reorderable<T>(StackPanel rows, Border host, Border card, TextBlock handle, T item, List<T> list, Brush rest, Action reordered) where T : class
+        {
+            List<FrameworkElement> hosts = null; List<double> sizes = null; int from = -1, to = -1; double start = 0, grab = 0, top = 0, height = 0, total = 0; bool pressed = false; ScrollViewer scroll = null;
+            host.Tag = item; host.RenderTransform = new TranslateTransform();
+            var edge = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+            List<FrameworkElement> Rows() => rows.Children.OfType<FrameworkElement>().Where(x => x.Tag is T).ToList();
+            bool Place(List<FrameworkElement> order, int source, int target) { if (!RuleOrder.Move(list, item, (T)order[target].Tag, target > source)) return false; focusedRow = item; reordered(); return true; }
+            double Size(FrameworkElement x) => x.ActualHeight + x.Margin.Top + x.Margin.Bottom;
+            void Slide(FrameworkElement x, double y, Action done = null) { var animation = new DoubleAnimation(y, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } }; if (done != null) animation.Completed += (s, e) => done(); x.RenderTransform.BeginAnimation(TranslateTransform.YProperty, animation); }
+            void Track()
+            {
+                double offset = Math.Clamp(System.Windows.Input.Mouse.GetPosition(rows).Y - grab - top, -top, total - height - top); ((TranslateTransform)host.RenderTransform).Y = offset;
+                int target = RuleOrder.Slot(sizes, from, offset); if (target == to) return; to = target;
+                for (int i = 0; i < hosts.Count; i++) if (i != from) Slide(hosts[i], i > from && i <= to ? -height : i < from && i >= to ? height : 0);
+            }
+            void Begin()
+            {
+                rowDragging = true; hosts = Rows(); sizes = hosts.Select(Size).ToList(); from = to = hosts.IndexOf(host); top = sizes.Take(from).Sum(); height = sizes[from]; total = sizes.Sum(); grab = start - top;
+                foreach (var x in hosts) { x.RenderTransform.BeginAnimation(TranslateTransform.YProperty, null); if (x.RenderTransform is TranslateTransform t) t.Y = 0; }
+                Panel.SetZIndex(host, 1); card.Background = R("SurfaceRaised"); card.BorderBrush = R("Accent"); host.Effect = new DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Direction = 270, Opacity = .3 };
+                scroll = null; for (DependencyObject x = rows; x != null; x = VisualTreeHelper.GetParent(x)) if (x is ScrollViewer v) { scroll = v; break; }
+                edge.Start();
+            }
+            void End(bool commit)
+            {
+                edge.Stop(); if (hosts == null) return;
+                bool moved = commit && to != from; double slot = to > from ? sizes.Skip(from + 1).Take(to - from).Sum() : -sizes.Skip(to).Take(from - to).Sum();
+                if (!moved) foreach (var x in hosts) if (x != host) Slide(x, 0);
+                var order = hosts; int source = from, target = to; hosts = null;
+                Slide(host, moved ? slot : 0, () =>
+                {
+                    host.Effect = null; Panel.SetZIndex(host, 0); rowDragging = false; var later = pendingRender; pendingRender = null;
+                    if (moved && Place(order, source, target)) return;
+                    foreach (var x in order) if (x != host) Slide(x, 0);
+                    card.Background = card.IsMouseOver ? R("Hover") : rest; card.BorderBrush = Brushes.Transparent; later?.Invoke();
+                });
+            }
+            edge.Tick += (s, e) => { if (scroll == null || hosts == null) return; double y = System.Windows.Input.Mouse.GetPosition(scroll).Y, speed = y < 40 ? -Math.Min(18, (40 - y) * .5) : y > scroll.ActualHeight - 40 ? Math.Min(18, (y - scroll.ActualHeight + 40) * .5) : 0; if (speed != 0) { scroll.ScrollToVerticalOffset(scroll.VerticalOffset + speed); scroll.UpdateLayout(); } Track(); };
+            handle.MouseLeftButtonDown += (s, e) => { if (rowDragging) return; start = e.GetPosition(rows).Y; pressed = true; handle.Focus(); handle.CaptureMouse(); e.Handled = true; };
+            handle.MouseMove += (s, e) => { if (!pressed) return; if (hosts == null) { if (Math.Abs(e.GetPosition(rows).Y - start) < SystemParameters.MinimumVerticalDragDistance) return; Begin(); } Track(); };
+            handle.MouseLeftButtonUp += (s, e) => { if (!pressed) return; pressed = false; End(true); handle.ReleaseMouseCapture(); e.Handled = true; };
+            handle.LostMouseCapture += (s, e) => { if (!pressed) return; pressed = false; End(false); };
+            handle.PreviewKeyDown += (s, e) => { if (e.Key != System.Windows.Input.Key.Escape || !pressed) return; pressed = false; End(false); handle.ReleaseMouseCapture(); e.Handled = true; };
+            handle.KeyDown += (s, e) => { if (System.Windows.Input.Keyboard.Modifiers != System.Windows.Input.ModifierKeys.Alt || rowDragging) return; var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key; if (key != System.Windows.Input.Key.Up && key != System.Windows.Input.Key.Down) return; var order = Rows(); int i = order.IndexOf(host), j = i + (key == System.Windows.Input.Key.Up ? -1 : 1); if (j >= 0 && j < order.Count) Place(order, i, j); e.Handled = true; };
+            if (item == focusedRow) { focusedRow = null; handle.Loaded += (s, e) => handle.Focus(); }
+            card.MouseEnter += (s, e) => { if (rowDragging) return; card.Background = R("Hover"); handle.Foreground = R("Text"); };
+            card.MouseLeave += (s, e) => { if (rowDragging) return; card.Background = rest; handle.Foreground = R("Muted"); };
+        }
+        void MicrophonesReordered() { Storage.SaveSettings(settings); MicrophonesChanged?.Invoke(); renderMicrophones?.Invoke(); }
         void Select(StackPanel p, string title, string desc, string[] values, int selected, Action<int> onChange, bool enabled = true) { var s = new StackPanel(); s.Children.Add(T(title, 15)); var d = T(desc, 12, "Muted"); d.Margin = new Thickness(0, 6, 0, 14); s.Children.Add(d); var combo = new ComboBox { ItemsSource = values, SelectedIndex = Math.Max(0, selected), MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = enabled }; if (FirstSelector == null) FirstSelector = combo; AutomationProperties.SetName(combo, title); combo.SelectionChanged += (a, b) => { if (combo.SelectedIndex >= 0) try { onChange(combo.SelectedIndex); } catch { SetStatus("Die Einstellung konnte nicht geändert werden."); } }; s.Children.Add(combo); p.Children.Add(Card(s)); }
         void Info(StackPanel p, string title, string desc) { var s = new StackPanel(); s.Children.Add(T(title, 15)); var d = T(desc, 12, "Muted"); d.Margin = new Thickness(0, 7, 0, 0); s.Children.Add(d); p.Children.Add(Card(s)); }
     }

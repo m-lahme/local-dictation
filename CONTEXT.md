@@ -87,3 +87,7 @@ _Avoid_: Model recommendation, automatic model selection
 **Audio input availability**:
 The selected microphone's demonstrated ability to deliver valid audio samples. An existing or nominally active stream alone does not establish availability after device changes, interruptions, or Remote Desktop reconnections.
 _Avoid_: Stream state, device connection
+
+**Microphone priority**:
+The user-ordered list of known microphones. Local Dictation selects the highest connected entry, re-evaluates the selection on device changes while idle, and never switches microphones during a Dictation. Newly connected microphones join at the lowest priority.
+_Avoid_: Selected microphone, default microphone

@@ -32,6 +32,12 @@ Der optionale automatische Modellwechsel reagiert auf Windows-Energieereignisse:
 
 Der Modellkatalog enthält feste Quellrevisionen, Größen und SHA-256-Prüfsummen. Downloads werden vor der Aktivierung geprüft. Inaktive Modelle lassen sich über die Einstellungen entfernen.
 
+## Mikrofone
+
+Unter „Audio und Hotkeys“ steht eine Prioritätsliste aller Mikrofone, die Windows kennt, auch der gerade nicht angeschlossenen. Verwendet wird das oberste verbundene Mikrofon. Die Reihenfolge lässt sich per Drag & Drop oder Alt+Pfeil ändern. Typ und Anschluss werden aus den Windows-Geräteeigenschaften abgeleitet, etwa Laptop, Headset, Webcam, USB oder Bluetooth. Beim ersten Start steht ein zuvor gewähltes Mikrofon oben; die übrigen werden nach Gerätetyp sortiert. Neu angeschlossene Geräte kommen ans Ende.
+
+Die App reagiert auf Windows-Geräteereignisse und wechselt im Leerlauf zum besten verfügbaren Mikrofon, ohne den Aufnahmestrom zu starten. Während eines Diktats wird nicht gewechselt. Fällt das verwendete Mikrofon währenddessen aus, wird das Diktat wie bisher als unterbrochen behandelt.
+
 ## Wörterbuch, Verlauf und Statistik
 
 Ersetzungsregeln werden in sichtbarer Reihenfolge angewendet. Sie unterstützen ganze Wörter oder Wortteile, wählbare Groß-/Kleinschreibung und Unicode-Normalisierung. Regeln lassen sich suchen und per Drag & Drop umsortieren. Aus markiertem, korrigiertem Text kann die App neue Regeln vorschlagen; diese werden vor dem Übernehmen geprüft und bearbeitet.
