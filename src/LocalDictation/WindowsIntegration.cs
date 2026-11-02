@@ -19,7 +19,7 @@ namespace LocalDictation
         public void Start(string root, string engine, string device)
         {
             string exe = Path.Combine(root, "native", "LocalDictation.Worker.exe");
-            var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = Path.GetDirectoryName(exe) };
+            var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = Path.GetDirectoryName(exe) }; info.Environment["LOCAL_DICTATION_LANGUAGE"] = L.Language;
             info.ArgumentList.Add("--engine"); info.ArgumentList.Add(engine); info.ArgumentList.Add("--device"); info.ArgumentList.Add(device); info.ArgumentList.Add("--models"); info.ArgumentList.Add(Models.Root);
             process = new Process { StartInfo = info, EnableRaisingEvents = true };
             process.OutputDataReceived += (s, e) => { if (e.Data == null || disposed) return; try { if (JsonLite.Value(e.Data, "event") == "model" && JsonLite.Value(e.Data, "state") == "ready") Ready = true; Event?.Invoke(e.Data); } catch (Exception ex) { Storage.Log("worker protocol: " + ex.Message); } };
@@ -36,7 +36,7 @@ namespace LocalDictation
         public static async Task<string> RunAsync(string root)
         {
             string exe = Path.Combine(root, "native", "LocalDictation.Worker.exe");
-            var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = Path.GetDirectoryName(exe) };
+            var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = Path.GetDirectoryName(exe) }; info.Environment["LOCAL_DICTATION_LANGUAGE"] = L.Language;
             info.ArgumentList.Add("--probe");
             using var process = new Process { StartInfo = info }; using var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(20));
             process.Start(); _ = process.StandardError.ReadToEndAsync();
@@ -54,7 +54,7 @@ namespace LocalDictation
         public static async Task<string> RunAsync(string root, string engine, string audioPath)
         {
             string exe = Path.Combine(root, "native", "LocalDictation.Worker.exe");
-            var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = Path.GetDirectoryName(exe) };
+            var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = Path.GetDirectoryName(exe) }; info.Environment["LOCAL_DICTATION_LANGUAGE"] = L.Language;
             foreach (string value in new[] { "--engine", engine, "--device", engine == "whisper" ? "gpu" : "cpu", "--models", Models.Root, "--file", audioPath }) info.ArgumentList.Add(value);
             using var process = new Process { StartInfo = info };
             process.Start();

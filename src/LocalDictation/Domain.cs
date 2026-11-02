@@ -39,6 +39,7 @@ namespace LocalDictation
         public int Version { get; set; } = 2;
         public string Engine { get; set; } = "parakeet";
         public string Theme { get; set; } = "system";
+        public string Language { get; set; } = "system";
         public string Device { get; set; } = "gpu";
         public bool AutomaticPowerModel { get; set; }
         public int WhisperIdleMinutes { get; set; } = 5;

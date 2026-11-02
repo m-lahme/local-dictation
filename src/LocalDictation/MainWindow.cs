@@ -147,6 +147,7 @@ namespace LocalDictation
             }
             else if (key == "appearance")
             {
+                Select(p, L.T("Language"), L.T("“System” follows the Windows display language. Other languages use English."), new[] { "System (" + (L.SystemLanguage == "de" ? "Deutsch" : "English") + ")", "Deutsch", "English" }, settings.Language == "de" ? 1 : settings.Language == "en" ? 2 : 0, i => { settings.Language = i == 1 ? "de" : i == 2 ? "en" : "system"; L.Language = L.Resolve(settings.Language); Save(); RefreshTheme(); });
                 Select(p, "Design", "System folgt der Windows-Darstellung.", new[] { "System", "Hell", "Dunkel" }, settings.Theme == "light" ? 1 : settings.Theme == "dark" ? 2 : 0, i => { settings.Theme = i == 1 ? "light" : i == 2 ? "dark" : "system"; Save(); RefreshTheme(); });
                 Select(p, "Overlay-Position", "Ziehen verschiebt das Overlay für diese Sitzung.", new[] { "Unten mittig", "Unten links", "Unten rechts", "Oben mittig", "Oben links", "Oben rechts" }, Array.IndexOf(Anchors, settings.Anchor), i => { settings.Anchor = Anchors[i]; Save(); });
                 var screens = Forms.Screen.AllScreens; Select(p, "Bildschirm", "Wenn der Bildschirm fehlt, verwendet die App vorübergehend den Hauptbildschirm.", new[] { "Hauptbildschirm" }.Concat(screens.Select(x => x.DeviceName)).ToArray(), Math.Max(0, Array.FindIndex(screens, x => x.DeviceName == settings.Monitor) + 1), i => { settings.Monitor = i == 0 ? "" : screens[i - 1].DeviceName; Save(); });
