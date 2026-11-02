@@ -19,12 +19,11 @@ Local Dictation is licensed under the MIT License, see [LICENSE](LICENSE). It us
 | whisper.cpp and ggml (native libraries in Whisper.net.Runtime), https://github.com/ggml-org/whisper.cpp | as bundled in Whisper.net 1.9.1 | MIT | `licenses/whisper.cpp.txt` |
 | llamafile sgemm (in ggml-cpu) and Vulkan-Hpp headers (in ggml-vulkan) | as bundled | MIT; Apache-2.0 | `licenses/ggml-third-party.txt` |
 | Microsoft.Extensions.AI.Abstractions (dependency of Whisper.net) | 10.2.0 | MIT | `licenses/Microsoft.Extensions.AI.Abstractions.txt` |
-| sherpa-onnx, https://github.com/k2-fsa/sherpa-onnx/tree/3dc7c569f31ca2cd4a20ed6f7db780327e6714c5 | 1.13.5 | Apache-2.0 | `licenses/sherpa-onnx.txt` |
+| sherpa-onnx (managed wrapper from the NuGet package; native library from the official release build without text-to-speech, `sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-no-tts-lib`), https://github.com/k2-fsa/sherpa-onnx/tree/3dc7c569f31ca2cd4a20ed6f7db780327e6714c5 | 1.13.5 | Apache-2.0 | `licenses/sherpa-onnx.txt` |
 | Libraries statically linked into `sherpa-onnx-c-api.dll`: kaldi-native-fbank, kaldi-decoder, kaldifst, OpenFst, simple-sentencepiece, darts-clone, nlohmann/json, hclust-cpp/fastcluster, Eigen | see file | Apache-2.0, BSD-2-Clause, MIT, MPL-2.0 | `licenses/sherpa-onnx-third-party.txt`, `licenses/Apache-2.0.txt`, `licenses/MPL-2.0.txt` |
-| espeak-ng and piper-phonemize (text-to-speech code contained in the prebuilt `sherpa-onnx-c-api.dll`, not used by Local Dictation) | see file | GPL-3.0-or-later; MIT | `licenses/espeak-ng.txt`, `licenses/GPL-3.0.txt` |
-| ONNX Runtime (prebuilt by k2-fsa/onnxruntime-libs, part of the sherpa-onnx runtime package), https://github.com/microsoft/onnxruntime/tree/v1.27.1 | 1.27.1 | MIT, with third-party notices | `licenses/onnxruntime.txt`, `licenses/onnxruntime-third-party-notices.txt` |
+| ONNX Runtime (prebuilt by k2-fsa/onnxruntime-libs, shipped with sherpa-onnx 1.13.5), https://github.com/microsoft/onnxruntime/tree/v1.27.1 | 1.27.1 | MIT, with third-party notices | `licenses/onnxruntime.txt`, `licenses/onnxruntime-third-party-notices.txt` |
 
-`licenses/espeak-ng.txt` names the exact source code revisions for the GPL-licensed part of `sherpa-onnx-c-api.dll`. The Eigen source code used by sherpa-onnx is available at https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz.
+The Eigen source code used by sherpa-onnx is available at https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz.
 
 ## Models downloaded at runtime
 

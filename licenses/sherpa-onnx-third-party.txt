@@ -1,6 +1,7 @@
 Components statically linked into sherpa-onnx-c-api.dll
-(sherpa-onnx 1.13.5, built from https://github.com/k2-fsa/sherpa-onnx/tree/3dc7c569f31ca2cd4a20ed6f7db780327e6714c5
-and shipped in the NuGet package org.k2fsa.sherpa.onnx.runtime.win-x64 1.13.5)
+(official sherpa-onnx 1.13.5 release build without text-to-speech,
+sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-no-tts-lib, built from
+https://github.com/k2-fsa/sherpa-onnx/tree/3dc7c569f31ca2cd4a20ed6f7db780327e6714c5)
 
 Apache License 2.0 (full text: Apache-2.0.txt)
 - kaldi-native-fbank v1.22.3, https://github.com/csukuangfj/kaldi-native-fbank/tree/v1.22.3
@@ -19,10 +20,6 @@ MIT License
 BSD 2-Clause License
 - darts-clone (bundled in simple-sentencepiece), https://github.com/s-yata/darts-clone (text below)
 - fastcluster via hclust-cpp 2026-02-25, https://github.com/csukuangfj/hclust-cpp/tree/2026-02-25 (text below)
-
-Text-to-speech components (not used by Local Dictation, but contained in the prebuilt DLL):
-- espeak-ng (fork), GPL-3.0-or-later; see espeak-ng.txt
-- piper-phonemize, MIT, with uni-algo (public domain); see espeak-ng.txt
 
 ================================================================================
 kaldifst / Kaldi legal notices
