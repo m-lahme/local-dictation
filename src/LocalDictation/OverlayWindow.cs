@@ -18,7 +18,7 @@ namespace LocalDictation
         readonly double[] currentH = {3,3,3,3,3}, currentY = new double[5];
         readonly double[] targetBands=new double[5], smoothedBands=new double[5];
         double targetLevel, smoothedLevel, lastFrame; bool rendering; Color currentColor = Color.FromRgb(130,134,144);
-        AppState state; double phase; bool dragging; Point down; double startLeft, startTop; string theme = "dark";
+        AppState state; double phase; bool dragging; NativePoint down; NativeRect start; string theme = "dark"; string placedAnchor = "bottom-center", placedMonitor = ""; bool placePending;
         readonly Grid meter; readonly StackPanel notice; readonly TextBlock noticeIcon, noticeText; bool expanded; double compactLeft, compactTop, expandedLeft, expandedTop;
         const double CompactWidth = 52, CompactHeight = 26, NoticeWidth = 206, NoticeHeight = 36;
         public event Action MenuRequested; public event Action IdleReached;
@@ -37,6 +37,13 @@ namespace LocalDictation
         static readonly double[] IdleH = { 3, 3, 3, 3, 3 }, IdleY = { 0, 0, 0, 0, 0 }, MeterH = { 7, 13, 19, 13, 7 }, CheckH = { 5, 5, 5, 5, 5 }, CheckY = { 2, 6, 3, -1, -5 }, ErrorH = { 11, 4, 16, 4, 11 };
         [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int index);
         [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int index, int value);
+        [StructLayout(LayoutKind.Sequential)] struct NativePoint { public int X, Y; }
+        [StructLayout(LayoutKind.Sequential)] struct NativeRect { public int Left, Top, Right, Bottom; }
+        [DllImport("user32.dll")] static extern bool GetCursorPos(out NativePoint point);
+        [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out NativeRect rect);
+        [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int width, int height, uint flags);
+        const uint MoveOnly = 0x0001 | 0x0004 | 0x0010; // SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+        IntPtr Handle => new WindowInteropHelper(this).Handle;
         public OverlayWindow()
         {
             Width = 52; Height = 26; WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false; ShowActivated = false; Topmost = true; Title = "Local Dictation Status";
@@ -48,11 +55,12 @@ namespace LocalDictation
             noticeText = new TextBlock { FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
             notice = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed, Children = { noticeIcon, noticeText } };
             shell.Child = new Grid { Children = { meter, notice } };
-            MouseLeftButtonDown += (s, e) => { down = PointToScreen(e.GetPosition(this)); startLeft = Left; startTop = Top; dragging = false; CaptureMouse(); };
-            MouseMove += (s, e) => { if (!IsMouseCaptured) return; var q = PointToScreen(e.GetPosition(this)); var dpi = VisualTreeHelper.GetDpi(this); double dx = (q.X - down.X) / dpi.DpiScaleX, dy = (q.Y - down.Y) / dpi.DpiScaleY; if (Math.Abs(dx) + Math.Abs(dy) > 4) dragging = true; if (dragging) { Left = startLeft + dx; Top = startTop + dy; } };
+            // Dragging works in physical pixels, so crossing into a monitor with another scale does not make the pill jump.
+            MouseLeftButtonDown += (s, e) => { GetCursorPos(out down); GetWindowRect(Handle, out start); dragging = false; CaptureMouse(); };
+            MouseMove += (s, e) => { if (!IsMouseCaptured) return; GetCursorPos(out var q); int dx = q.X - down.X, dy = q.Y - down.Y; if (Math.Abs(dx) + Math.Abs(dy) > 4 * VisualTreeHelper.GetDpi(this).DpiScaleX) dragging = true; if (dragging) SetWindowPos(Handle, IntPtr.Zero, start.Left + dx, start.Top + dy, 0, 0, MoveOnly); };
             MouseLeftButtonUp += (s, e) => { ReleaseMouseCapture(); if (!dragging) MenuRequested?.Invoke(); }; MouseRightButtonUp += (s, e) => MenuRequested?.Invoke();
             feedback = new DispatcherTimer(); feedback.Tick += (s, e) => { feedback.Stop(); SetState(AppState.Idle, 0); };
-            IsVisibleChanged += (s,e) => { if (IsVisible) StartFrames(); else StopFrames(); };
+            IsVisibleChanged += (s,e) => { if (IsVisible) { StartFrames(); if (placePending) Place(placedAnchor, placedMonitor); } else StopFrames(); };
             Closed += (s,e) => { StopFrames(); feedback.Stop(); }; ApplyTheme("dark"); SetState(AppState.Idle, 0);
         }
         public void ApplyTheme(string mode) { theme = mode; bool dark = Theme.IsDark(mode); shell.Background = Theme.Brush(dark ? Color.FromRgb(22, 24, 29) : Color.FromRgb(255, 254, 251)); shell.BorderBrush = Theme.Brush(dark ? Color.FromRgb(49, 52, 61) : Color.FromRgb(214, 210, 202)); noticeIcon.Foreground = Theme.Brush(dark ? Color.FromRgb(91, 156, 240) : Color.FromRgb(37, 99, 190)); noticeText.Foreground = Theme.Brush(dark ? Color.FromRgb(232, 233, 236) : Color.FromRgb(30, 31, 36)); StartFrames(); }
@@ -127,6 +135,8 @@ namespace LocalDictation
             }
             return settled;
         }
-        public void Place(string anchor = "bottom-center", string monitor = "") { Layout(false, false); var screen = Array.Find(Forms.Screen.AllScreens, s => s.DeviceName == monitor) ?? Forms.Screen.PrimaryScreen; var area = screen.WorkingArea; var dpi = VisualTreeHelper.GetDpi(this); double left = area.Left / dpi.DpiScaleX, top = area.Top / dpi.DpiScaleY, width = area.Width / dpi.DpiScaleX, height = area.Height / dpi.DpiScaleY; Left = anchor.EndsWith("left") ? left + 4 : anchor.EndsWith("right") ? left + width - Width - 4 : left + (width - Width) / 2; Top = anchor.StartsWith("top") ? top + 4 : top + height - Height - 4; }
+        // WPF converts Left/Top with the DPI of the monitor the overlay is on, so it first moves onto the target monitor and then positions itself with that monitor's DPI.
+        // A hidden overlay may not receive the DPI change, so it is placed again when it becomes visible.
+        public void Place(string anchor = "bottom-center", string monitor = "") { placedAnchor = anchor; placedMonitor = monitor; placePending = !IsVisible; Layout(false, false); var screen = Array.Find(Forms.Screen.AllScreens, s => s.DeviceName == monitor) ?? Forms.Screen.PrimaryScreen; var area = screen.WorkingArea; if (Handle != IntPtr.Zero) SetWindowPos(Handle, IntPtr.Zero, area.Left + area.Width / 2, area.Top + area.Height / 2, 0, 0, MoveOnly); var dpi = VisualTreeHelper.GetDpi(this); double left = area.Left / dpi.DpiScaleX, top = area.Top / dpi.DpiScaleY, width = area.Width / dpi.DpiScaleX, height = area.Height / dpi.DpiScaleY; Left = anchor.EndsWith("left") ? left + 4 : anchor.EndsWith("right") ? left + width - Width - 4 : left + (width - Width) / 2; Top = anchor.StartsWith("top") ? top + 4 : top + height - Height - 4; }
     }
 }
