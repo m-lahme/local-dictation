@@ -22,7 +22,7 @@ internal static class Program
         string depot = Get("--models", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalDictation", "native-models"));
         try
         {
-            if (engine == "whisper" && device != "gpu") throw new InvalidOperationException("Whisper auf der CPU ist deaktiviert. Verwende Whisper/GPU oder Parakeet/CPU.");
+            if (engine == "whisper" && device != "gpu") throw new InvalidOperationException(Messages.T("Whisper on the CPU is disabled. Use Whisper/GPU or Parakeet/CPU.", "Whisper auf der CPU ist deaktiviert. Verwende Whisper/GPU oder Parakeet/CPU."));
             using var logger = Whisper.net.Logger.LogProvider.AddLogger((level, message) => { Console.Error.Write(message); WhisperLog.Add(message); }); var load = Stopwatch.StartNew();
             Emit(new { @event = "model", state = "loading", engine });
             using var backend = new Backend(engine, device, depot);
@@ -50,9 +50,9 @@ internal static class Program
                     if (root.GetProperty("command").GetString() == "quit") break;
                     var id = root.GetProperty("id").GetInt32();
                     byte[] bytes = Convert.FromBase64String(root.GetProperty("audio").GetString()!);
-                    if (bytes.Length % 4 != 0) throw new InvalidDataException("Ungültige Audiolänge");
+                    if (bytes.Length % 4 != 0) throw new InvalidDataException(Messages.T("Invalid audio length", "Ungültige Audiolänge"));
                     var audio = new float[bytes.Length / 4]; Buffer.BlockCopy(bytes, 0, audio, 0, bytes.Length);
-                    if (audio.Any(x => !float.IsFinite(x))) throw new InvalidDataException("Ungültige Audiosamples");
+                    if (audio.Any(x => !float.IsFinite(x))) throw new InvalidDataException(Messages.T("Invalid audio samples", "Ungültige Audiosamples"));
                     Emit(new { @event = "state", value = "transcribing", id });
                     var watch = Stopwatch.StartNew();
                     var result = audio.Length < 1600 || audio.All(x => Math.Abs(x) < 0.0001) ? TranscriptResult.Empty : await backend.Transcribe(audio);
@@ -83,7 +83,7 @@ internal static class Program
             }
             else
             {
-                string FileFor(string name) { var path = Path.Combine(depot, "parakeet", name); return File.Exists(path) ? path : throw new FileNotFoundException("Parakeet-Modelldatei fehlt: " + path, path); }
+                string FileFor(string name) { var path = Path.Combine(depot, "parakeet", name); return File.Exists(path) ? path : throw new FileNotFoundException(Messages.T("Parakeet model file is missing: " + path, "Parakeet-Modelldatei fehlt: " + path), path); }
                 var config = new OfflineRecognizerConfig();
                 config.FeatConfig.SampleRate = 16000; config.FeatConfig.FeatureDim = 128;
                 config.ModelConfig.Transducer.Encoder = FileFor("encoder.int8.onnx");
@@ -105,7 +105,7 @@ internal static class Program
         public async Task WarmUp()
         {
             await Transcribe(new float[16000], true);
-            if (gpu != null && WhisperLog.UsedDevice != gpu) throw new InvalidOperationException("whisper.cpp nutzt " + (WhisperLog.UsedDevice ?? "die CPU") + " statt der GPU " + gpu + ".");
+            if (gpu != null && WhisperLog.UsedDevice != gpu) throw new InvalidOperationException(Messages.T("whisper.cpp is using " + (WhisperLog.UsedDevice ?? "the CPU") + " instead of the GPU " + gpu + ".", "whisper.cpp nutzt " + (WhisperLog.UsedDevice ?? "die CPU") + " statt der GPU " + gpu + "."));
         }
         public async Task<TranscriptResult> Transcribe(float[] audio, bool warmup = false)
         {
@@ -152,7 +152,7 @@ internal static class Program
                 }
                 return TranscriptResult.FromWhisper(chunks, retryAttempted, retryUsed);
             }
-            using var stream = parakeet!.CreateStream(); if (stream.Handle == IntPtr.Zero) throw new InvalidOperationException("Parakeet konnte nicht geladen werden, sherpa-onnx hat die Modelldateien abgelehnt.");
+            using var stream = parakeet!.CreateStream(); if (stream.Handle == IntPtr.Zero) throw new InvalidOperationException(Messages.T("Parakeet could not be loaded: sherpa-onnx rejected the model files.", "Parakeet konnte nicht geladen werden, sherpa-onnx hat die Modelldateien abgelehnt."));
             stream.AcceptWaveform(16000, audio); parakeet.Decode(stream);
             return TranscriptResult.FromParakeet(stream.Result.Text.Trim());
         }

@@ -55,16 +55,16 @@ namespace LocalDictation
         public static ContextMenu Create(Settings settings,bool busy,Action history,Action dictionary,Action visibility,Action preferences,Action quit)
         {
             var menu=Shell(settings,225,PlacementMode.MousePoint);
-            Add(menu,"Verlauf","\uE81C",history);Add(menu,"Wörterbuch","\uE8D2",dictionary);Add(menu,settings.OverlayVisible?"Overlay ausblenden":"Overlay anzeigen","\uE890",visibility,!busy);Add(menu,"Einstellungen","\uE713",preferences);
-            Separate(menu);Add(menu,"Beenden","\uE7E8",quit);return menu;
+            Add(menu,L.T("History"),"\uE81C",history);Add(menu,L.T("Dictionary"),"\uE8D2",dictionary);Add(menu,settings.OverlayVisible?L.T("Hide overlay"):L.T("Show overlay"),"\uE890",visibility,!busy);Add(menu,L.T("Settings"),"\uE713",preferences);
+            Separate(menu);Add(menu,L.T("Quit"),"\uE7E8",quit);return menu;
         }
         public static ContextMenu CreateRetry(Settings settings,IReadOnlyList<Command> variants,Action<string> retry)
         {
             var menu=Shell(settings,220,PlacementMode.Bottom);
             foreach(var command in variants)Add(menu,command.Title,command.Glyph,command.Action,command.Enabled);
             if(variants.Count>0)Separate(menu);
-            Add(menu,"Mit Whisper neu versuchen","\uE72C",()=>retry("whisper"));
-            Add(menu,"Mit Parakeet neu versuchen","\uE72C",()=>retry("parakeet"));
+            Add(menu,L.F("Try again with {0}","Whisper"),"\uE72C",()=>retry("whisper"));
+            Add(menu,L.F("Try again with {0}","Parakeet"),"\uE72C",()=>retry("parakeet"));
             return menu;
         }
     }

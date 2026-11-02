@@ -59,6 +59,7 @@ internal static class UiAudit
 
         Task.Run(() => Downloads(Path.Combine(dataDirectory, "model-download-audit"))).GetAwaiter().GetResult();
         RuleEditing(dataDirectory);
+        MainWindowLanguages(dataDirectory);
     }
 
     static async Task Downloads(string dir)
@@ -102,7 +103,7 @@ internal static class UiAudit
         try
         {
             var stalled = await Fails(Fetch(Model(server.Url)));
-            Check(stalled.InnerException is TimeoutException && stalled.Message.Contains("Stocken") && new FileInfo(partial).Length == 50_000, "stalled download times out and keeps its partial file");
+            Check(stalled.InnerException is TimeoutException && stalled.Message.Contains("stalled") && new FileInfo(partial).Length == 50_000, "stalled download times out and keeps its partial file");
         }
         finally { Models.StallTimeout = TimeSpan.FromSeconds(60); server.StallAfter = -1; }
         server.Requests.Clear(); await Fetch(Model(server.Url));
@@ -113,10 +114,13 @@ internal static class UiAudit
         Reset(body.Take(1000).ToArray()); server.Status = 416;
         await Fails(Fetch(Model(server.Url)));
         Check(!File.Exists(partial), "unsatisfiable range deletes the partial download"); server.Status = 200; server.Requests.Clear();
-        Check((await Fails(Fetch(Model(server.Url, size: 1L << 60)))).Message.Contains("Speicherplatz") && server.Requests.Count == 0, "free space is checked before downloading");
-        Check((await Fails(Fetch(Model(unreachable)))).Message.Contains("Internetverbindung"), "unreachable server is explained");
-        Check(Models.Describe(new HttpRequestException("x", null, HttpStatusCode.ProxyAuthenticationRequired), "Whisper").Contains("Proxy"), "proxy authentication failure is explained");
-        Check(Models.Describe(new IOException("x", unchecked((int)0x80070070)), "Whisper").Contains("Speicherplatz"), "full disk is explained");
+        Check((await Fails(Fetch(Model(server.Url, size: 1L << 60)))).Message.Contains("disk space") && server.Requests.Count == 0, "free space is checked before downloading");
+        Check((await Fails(Fetch(Model(unreachable)))).Message.Contains("internet connection"), "unreachable server is explained");
+        Check(Models.Describe(new HttpRequestException("x", null, HttpStatusCode.ProxyAuthenticationRequired), "Whisper").Contains("proxy"), "proxy authentication failure is explained");
+        Check(Models.Describe(new IOException("x", unchecked((int)0x80070070)), "Whisper").Contains("disk space"), "full disk is explained");
+        string language = L.Language; L.Language = "de";
+        try { Check(Models.Describe(new IOException("x", unchecked((int)0x80070070)), "Whisper") == "Zu wenig freier Speicherplatz für Whisper. Gib Speicherplatz frei und versuche es erneut." && Models.Describe(new TimeoutException(), "Whisper").Contains("ins Stocken geraten"), "download errors keep the German wording"); }
+        finally { L.Language = language; }
     }
 
     static void RuleEditing(string dataDirectory)
@@ -126,8 +130,8 @@ internal static class UiAudit
         var area = SystemParameters.WorkArea;
         Check(window.Width <= area.Width - 32 && window.Height <= area.Height - 32 && window.MinWidth <= window.Width && window.MinHeight <= window.Height, "main window fits the work area");
         window.ShowDictionary();
-        Check(Find<Button>(window).First(x => AutomationProperties.GetName(x) == "Regel 1 löschen").FontFamily == Theme.IconFont, "icon buttons use the shared icon font");
-        var box = Find<TextBox>(window).First(x => AutomationProperties.GetName(x) == "Ersetzen 1");
+        Check(Find<Button>(window).First(x => AutomationProperties.GetName(x) == "Delete rule 1").FontFamily == Theme.IconFont, "icon buttons use the shared icon font");
+        var box = Find<TextBox>(window).First(x => AutomationProperties.GetName(x) == "Replace 1");
         string Saved() => Storage.LoadSettings().Rules[0].Source;
         box.Text = "neu";
         Equal("neu", settings.Rules[0].Source, "rule edit updates the settings at once");
@@ -136,6 +140,65 @@ internal static class UiAudit
         box.Text = "Fokus"; box.RaiseEvent(new RoutedEventArgs(UIElement.LostFocusEvent)); Equal("Fokus", Saved(), "rule edit saves when the field loses focus");
         box.Text = "Seite"; window.ShowHistory(); Equal("Seite", Saved(), "rule edit saves on page change");
         window.Close();
+    }
+
+    // Every page of the main window follows the UI language, also after switching it while the window exists.
+    static void MainWindowLanguages(string dataDirectory)
+    {
+        string previous = L.Language, dir = Path.Combine(dataDirectory, "main-window-languages"); MainWindow window = null;
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        Directory.CreateDirectory(dir);
+        var time = DateTime.Today.AddHours(9).AddMinutes(7); var english = System.Globalization.CultureInfo.GetCultureInfo("en-US"); var german = System.Globalization.CultureInfo.GetCultureInfo("de-DE");
+        Storage.Write(Path.Combine(dir, "history.json"), new[] { new HistoryEntry { Time = time, DurationMs = 4700, Engine = "whisper", Text = "a", ReviewRecommended = true, AudioFile = "audio.wav", AudioExpiresAtUtc = DateTime.UtcNow.AddMinutes(30) }, new HistoryEntry { Time = time.AddMinutes(-1), DurationMs = 1000, Engine = "parakeet", Text = "b", Status = "not-transcribed" } });
+        var settings = new Settings { Theme = "dark" }; settings.Rules.Add(new ReplacementRule { Source = "x", Target = "y" });
+        // Language names in the language selector are shown in their own language on purpose.
+        var germanTexts = L.GermanTexts.Where(x => x.Key != x.Value && x.Value != "Deutsch").Select(x => x.Value).ToHashSet(StringComparer.Ordinal);
+        List<string> Pages()
+        {
+            var texts = new List<string>();
+            window.ShowHistory(); texts.AddRange(Texts(window)); window.ShowDictionary(); texts.AddRange(Texts(window)); window.ShowStatistics(); texts.AddRange(Texts(window));
+            foreach (string key in new[] { "model", "audio", "output", "appearance", "general" }) { window.ShowSettings(key); texts.AddRange(Texts(window)); }
+            window.ShowCorrection("Das ist ein Tset", "Das ist ein Test", CorrectionLearning.Analyze("Das ist ein Tset", "Das ist ein Test")); texts.AddRange(Texts(window));
+            return texts;
+        }
+        void NoGerman(List<string> texts, string name) { var left = texts.Where(germanTexts.Contains).Distinct().ToList(); Check(left.Count == 0, name + (left.Count == 0 ? " [" + texts.Count + " texts]" : ": " + String.Join(" | ", left))); }
+        try
+        {
+            L.Language = "en"; window = new MainWindow(settings, dir, x => { }, x => { }, (h, engine) => { });
+            var en = Pages(); NoGerman(en, "main window pages show no German text in English");
+            Check(en.Contains("◷  History") && en.Contains("Delete rule 1") && en.Contains("Replace 1") && en.Contains("1 rule") && en.Contains("Dictation hotkey") && en.Contains("Starting…"), "main window pages are English");
+            Check(en.Any(x => x.StartsWith(time.ToString("MMM d · HH:mm", english) + "  ·  4.7 s  ·  Whisper  ·  Audio expires in ")) && en.Contains(time.AddMinutes(-1).ToString("MMM d · HH:mm", english) + "  ·  1.0 s  ·  Parakeet"), "English history uses the English date and number format");
+            Check(en.Any(x => x.Contains("“bullet point”, “new line” and “new paragraph”") && x.Contains("“literally bullet point”")), "English voice-command description names the English commands");
+            L.Language = "de"; window.RefreshTheme(); var shell = Texts(window);
+            Check(shell.Contains("◷  Verlauf") && shell.Contains("Beenden") && shell.Contains("Wird gestartet …"), "language switch rebuilds the main window in German");
+            var de = Pages();
+            Check(de.Contains("Regel 1 löschen") && de.Contains("Ersetzen 1") && de.Contains("Tastenkombination") && de.Contains("Wörter transkribiert") && de.Contains("Korrektur lernen"), "main window pages are German");
+            Check(de.Any(x => x.StartsWith(time.ToString("dd.MM. · HH:mm", german) + "  ·  4,7 s  ·  Whisper  ·  Audio noch ")) && de.Contains(time.AddMinutes(-1).ToString("dd.MM. · HH:mm", german) + "  ·  1,0 s  ·  Parakeet"), "German history keeps its date and number format");
+            Check(de.Contains("Am Satz- oder Diktatbeginn werden „Stichpunkt“, „neue Zeile“ und „neuer Absatz“ formatiert. Mit „wörtlich Stichpunkt“ bleibt das Wort erhalten."), "German voice-command description keeps the German commands");
+            L.Language = "en"; window.RefreshTheme(); shell = Texts(window);
+            Check(shell.Contains("◷  History") && shell.Contains("Quit") && shell.Contains("Starting…"), "language switch rebuilds the main window in English");
+            NoGerman(Pages(), "main window pages show no German text after switching back to English");
+        }
+        finally { L.Language = previous; window?.Close(); }
+    }
+
+    // Visible texts, tooltips, list values and automation names of the laid-out window content, including virtualized rows.
+    static List<string> Texts(Window window)
+    {
+        var root = (FrameworkElement)window.Content; root.Measure(new Size(1040, 740)); root.Arrange(new Rect(0, 0, 1040, 740)); root.UpdateLayout();
+        var texts = new List<string>(); var seen = new HashSet<DependencyObject>(); var pending = new Stack<DependencyObject>(); pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop(); if (!seen.Add(node)) continue;
+            if (node is TextBlock block) texts.Add(block.Text);
+            if (node is ContentControl control && control.Content is string content) texts.Add(content);
+            if (node is FrameworkElement element && element.ToolTip is string tip) texts.Add(tip);
+            if (node is ItemsControl items && items.ItemsSource is IEnumerable<string> values) texts.AddRange(values);
+            string name = AutomationProperties.GetName(node); if (!String.IsNullOrEmpty(name)) texts.Add(name);
+            foreach (var child in LogicalTreeHelper.GetChildren(node).OfType<DependencyObject>()) pending.Push(child);
+            if (node is Visual) for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) pending.Push(VisualTreeHelper.GetChild(node, i));
+        }
+        return texts;
     }
 
     static async Task<ModelDownloadException> Fails(Task task)

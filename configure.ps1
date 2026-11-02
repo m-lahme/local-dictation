@@ -4,6 +4,7 @@ param(
     [ValidateSet('whisper', 'parakeet')][string]$Engine,
     [ValidateSet('gpu', 'cpu')][string]$Device,
     [ValidateSet('system', 'light', 'dark')][string]$Theme,
+    [ValidateSet('system', 'de', 'en')][string]$Language,
     [ValidateSet('Insert', 'Clipboard', 'Both')][string]$Output,
     [ValidateSet('bottom-center', 'bottom-left', 'bottom-right', 'top-center', 'top-left', 'top-right')][string]$Anchor,
     [string]$Monitor,
@@ -23,7 +24,7 @@ $ErrorActionPreference = 'Stop'
 $settingsPath = Join-Path $DataDir 'settings.json'
 $temporary = "$settingsPath.new"
 if (-not (Test-Path -LiteralPath $settingsPath)) {
-    throw "Einstellungsdatei nicht gefunden: $settingsPath"
+    throw "Settings file not found: $settingsPath"
 }
 
 if ($Show -and $PSBoundParameters.Keys.Count -eq 1) {
@@ -41,7 +42,7 @@ $session = (Get-Process -Id $PID).SessionId
 function Get-RunningApp { @(Get-Process -Name LocalDictation -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session }) }
 $running = @(Get-RunningApp)
 if ($running.Count -gt 0 -and -not $Restart) {
-    throw 'Local Dictation läuft. Verwende -Restart, damit die App kontrolliert beendet, geändert und neu gestartet wird.'
+    throw 'Local Dictation is running. Use -Restart to quit the app cleanly, change the settings and start it again.'
 }
 
 if (-not $Executable) {
@@ -49,7 +50,7 @@ if (-not $Executable) {
     $Executable = @(@($running | ForEach-Object { $_.Path }) + @((Join-Path $PSScriptRoot 'bin\LocalDictation.exe'), (Join-Path $env:LOCALAPPDATA 'Programs\Local Dictation\LocalDictation.exe')) | Where-Object { $_ -and (Test-Path -LiteralPath $_) })[0]
 }
 if ($Restart -and -not ($Executable -and (Test-Path -LiteralPath $Executable))) {
-    throw $(if ($Executable) { "App nicht gefunden: $Executable" } else { 'Keine gebaute oder installierte LocalDictation.exe gefunden. Pfad mit -Executable angeben.' })
+    throw $(if ($Executable) { "App not found: $Executable" } else { 'No built or installed LocalDictation.exe found. Specify the path with -Executable.' })
 }
 
 if ($running.Count -gt 0) {
@@ -59,7 +60,7 @@ if ($running.Count -gt 0) {
         Start-Sleep -Milliseconds 100
         $running = @(Get-RunningApp)
     } while ($running.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline)
-    if ($running.Count -gt 0) { throw 'Local Dictation ließ sich nicht innerhalb von zehn Sekunden beenden.' }
+    if ($running.Count -gt 0) { throw 'Local Dictation did not quit within ten seconds.' }
 }
 
 try {

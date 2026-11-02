@@ -14,6 +14,19 @@ internal static class FeatureAudit
         Equal("Stichpunkt und neue Zeile und neuer Absatz", VoiceCommands.Apply("wörtlich Stichpunkt und wörtlich neue Zeile und wörtlich neuer Absatz"), "literal voice commands are escaped");
         Equal("Erster Satz.\r\nZweiter Satz.", VoiceCommands.Apply("Erster Satz. Neue Zeile Zweiter Satz."), "new line command");
         Equal("Erster Satz.\r\n\r\nZweiter Absatz.", VoiceCommands.Apply("Erster Satz. Neuer Absatz Zweiter Absatz."), "new paragraph command");
+        Equal("• buy milk.", VoiceCommands.Apply("Bullet point buy milk."), "English voice command creates bullet");
+        Equal("• Milk.\r\n• Bread.", VoiceCommands.Apply("Bullet point Milk. Bullet point Bread."), "English voice command creates list");
+        Equal("• milk\r\n• bread", VoiceCommands.Apply("bullet point, milk bullet point bread"), "English bullet inside a started list");
+        Equal("The bullet point stays.", VoiceCommands.Apply("The bullet point stays."), "ordinary English bullet words stay literal");
+        Equal("bullet point and new line and new paragraph", VoiceCommands.Apply("literally bullet point and literally new line and literally new paragraph"), "literal English voice commands are escaped");
+        Equal("First sentence.\r\nSecond sentence.", VoiceCommands.Apply("First sentence. New line Second sentence."), "English new line command");
+        Equal("First sentence.\r\n\r\nSecond paragraph.", VoiceCommands.Apply("First sentence. New paragraph, Second paragraph."), "English new paragraph command");
+        Equal("New lines stay. New paragraphs too.", VoiceCommands.Apply("New lines stay. New paragraphs too."), "English commands need the whole word");
+        Equal("Erster Satz.\r\nSecond sentence.\r\n\r\nDritter Satz.", VoiceCommands.Apply("Erster Satz. New line Second sentence. Neuer Absatz Dritter Satz."), "German and English commands mix in one dictation");
+        Equal("• Milch.\r\n• bread.", VoiceCommands.Apply("Stichpunkt Milch. Bullet point bread."), "German and English bullets share one list");
+        string language = L.Language; L.Language = "de";
+        try { Equal("A.\r\nB.\r\nC.", VoiceCommands.Apply("A. New line B. Neue Zeile C."), "voice commands do not depend on the UI language"); }
+        finally { L.Language = language; }
 
         string audioData = Path.Combine(dataDirectory, "retained-audio-audit");
         if (Directory.Exists(audioData)) Directory.Delete(audioData, true);

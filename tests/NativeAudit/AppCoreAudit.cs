@@ -48,9 +48,17 @@ internal static class AppCoreAudit
 
     static void Microphone()
     {
-        Check(AudioCapture.Explain(new UnauthorizedAccessException().HResult)?.Contains("Datenschutz") == true, "denied microphone access points to the Windows privacy settings");
-        Check(AudioCapture.Explain(new COMException("in use", unchecked((int)0x8889000A)).HResult)?.Contains("exklusiv") == true, "exclusive use by another program is named");
+        Check(AudioCapture.Explain(new UnauthorizedAccessException().HResult)?.Contains("Privacy & security") == true, "denied microphone access points to the Windows privacy settings");
+        Check(AudioCapture.Explain(new COMException("in use", unchecked((int)0x8889000A)).HResult)?.Contains("exclusively") == true, "exclusive use by another program is named");
         Check(AudioCapture.Explain(unchecked((int)0x88890004)) == null, "other start failures keep the generic message");
+        Check(AudioCapture.SilenceHint.StartsWith("The microphone delivers only silence."), "silence hint is English in the English UI");
+        string language = L.Language; L.Language = "de";
+        try
+        {
+            Check(AudioCapture.Explain(new UnauthorizedAccessException().HResult)?.Contains("Datenschutz und Sicherheit > Mikrofon") == true && AudioCapture.Explain(new COMException("in use", unchecked((int)0x8889000A)).HResult)?.Contains("exklusiv") == true, "microphone errors keep the German wording");
+            Equal("Das Mikrofon liefert nur Stille. Prüfe die Stummschaltung, die Mikrofonauswahl und in den Windows-Einstellungen unter Datenschutz und Sicherheit > Mikrofon den Zugriff für Desktop-Apps.", AudioCapture.SilenceHint, "silence hint follows a language switch");
+        }
+        finally { L.Language = language; }
         Check(AudioCapture.IsDigitalSilence(new float[16000]), "one second of digital zeros is reported as silence");
         Check(!AudioCapture.IsDigitalSilence(new float[15999]), "short recordings are not reported as silence");
         var quiet = new float[32000]; quiet[20000] = 1e-6f;

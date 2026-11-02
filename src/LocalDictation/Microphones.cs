@@ -135,8 +135,8 @@ namespace LocalDictation
             string hardware = Hardware(m); if (hardware.Length > 0 && Title(m) != hardware) parts.Add(hardware);
             return String.Join(" · ", parts);
         }
-        public static string KindLabel(string kind) => kind switch { "builtin" => Laptop.Value ? "Im Laptop eingebaut" : "Eingebaut", "headset" => "Headset", "webcam" => "Webcam", "microphone" => "Externes Mikrofon", "usb" => "USB-Audiogerät", "speakerphone" => "Freisprecheinrichtung", "line" => "Line-In", "virtual" => "Virtuelles Gerät", "remote" => "Remotedesktop", _ => "Audioeingang" };
-        public static string ConnectionLabel(string connection) => connection switch { "usb" => "USB", "bluetooth" => "Bluetooth", "jack" => "Klinke", _ => "" };
+        public static string KindLabel(string kind) => kind switch { "builtin" => Laptop.Value ? L.T("Built into the laptop") : L.T("Built-in"), "headset" => L.T("Headset"), "webcam" => L.T("Webcam"), "microphone" => L.T("External microphone"), "usb" => L.T("USB audio device"), "speakerphone" => L.T("Speakerphone"), "line" => L.T("Line in"), "virtual" => L.T("Virtual device"), "remote" => L.T("Remote Desktop"), _ => L.T("Audio input") };
+        public static string ConnectionLabel(string connection) => connection switch { "usb" => L.T("USB"), "bluetooth" => L.T("Bluetooth"), "jack" => L.T("Audio jack"), _ => "" };
         public static string Glyph(string kind) => kind switch { "builtin" => Laptop.Value ? "" : "", "headset" => "", "webcam" => "", "usb" => "", "speakerphone" => "", "virtual" => "", "remote" => "", _ => "" };
     }
 

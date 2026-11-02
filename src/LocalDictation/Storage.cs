@@ -58,7 +58,7 @@ namespace LocalDictation
                 if (File.Exists(old)) foreach (var line in File.ReadAllLines(old)) { var x = line.Split(new[] { '=' }, 2); if (x.Length < 2) continue; if (x[0] == "engine") result.Engine = x[1]; if (x[0] == "theme") result.Theme = x[1]; int n; if (x[0] == "output" && int.TryParse(x[1], out n) && n >= 0 && n <= 2) result.Output = (OutputMode)n; }
                 old = Path.Combine(DataDir, "rules.tsv"); if (File.Exists(old)) foreach (var line in File.ReadAllLines(old)) { var x = line.Split('\t'); if (x.Length >= 4) result.Rules.Add(new ReplacementRule { Whole = x[0] == "whole", CaseSensitive = x[1] == "case", Source = x[2], Target = x[3] }); }
             }
-            if (result.Version > 2) throw new InvalidDataException("Die Einstellungen stammen aus einer neueren App-Version. Bitte diese Version verwenden.");
+            if (result.Version > 2) throw new InvalidDataException(L.T("The settings were saved by a newer version of the app. Please use that version."));
             if (result.Engine != "whisper" && result.Engine != "parakeet") result.Engine = "parakeet";
             ModelSelection.Normalize(result);
             if (!Enum.IsDefined(typeof(OutputMode), result.Output)) result.Output = OutputMode.Insert;

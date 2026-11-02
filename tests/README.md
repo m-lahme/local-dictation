@@ -6,7 +6,7 @@ Run from the repository root with Windows PowerShell 5.1 or PowerShell 7:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\run-native-regression.ps1
 ```
 
-The default suite builds the C# audit executable and runs domain, storage, correction-learning, audio-conversion, power-routing, overlay-description and hotkey state-machine tests. It uses a new data directory under `work/tests/` on every run. It does not start microphone capture, send keys or alter the user's clipboard. Hotkey tests include delayed event delivery after cold audio startup. The same suite runs in GitHub Actions on `windows-latest` (`.github/workflows/ci.yml`).
+The default suite builds the C# audit executable and runs domain, storage, correction-learning, audio-conversion, power-routing, overlay-description, localization and hotkey state-machine tests. The localization audit fails when a UI text in `src/LocalDictation` has no German translation in `src/LocalDictation/Strings/`. It uses a new data directory under `work/tests/` on every run. It does not start microphone capture, send keys or alter the user's clipboard. Hotkey tests include delayed event delivery after cold audio startup. The same suite runs in GitHub Actions on `windows-latest` (`.github/workflows/ci.yml`).
 
 The optional `-Visual` switch opens WPF windows and writes render images and generated assets under `work/audit/visuals/`. Run this only when desktop interaction is acceptable.
 

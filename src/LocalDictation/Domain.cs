@@ -12,9 +12,9 @@ namespace LocalDictation
     public static class SidebarStatus
     {
         public static string ModelName(string engine) => engine == "whisper" ? "Whisper" : "Parakeet";
-        public static string Preparing(string engine) => ModelName(engine) + " wird vorbereitet …";
-        public static string Ready(string engine) => "Bereit · " + ModelName(engine);
-        public static string Completed(OutputMode mode) => mode == OutputMode.Clipboard ? "Text kopiert" : mode == OutputMode.Both ? "Text eingefügt und kopiert" : "Text eingefügt";
+        public static string Preparing(string engine) => L.F("Preparing {0} …", ModelName(engine));
+        public static string Ready(string engine) => L.F("Ready · {0}", ModelName(engine));
+        public static string Completed(OutputMode mode) => mode == OutputMode.Clipboard ? L.T("Text copied") : mode == OutputMode.Both ? L.T("Text inserted and copied") : L.T("Text inserted");
     }
     public sealed class ReplacementRule
     {
@@ -77,10 +77,10 @@ namespace LocalDictation
             text = text.Normalize(NormalizationForm.FormC); int count = 0;
             foreach (var r in rules)
             {
-                if (++count > 1000) throw new InvalidDataException("Maximal 1.000 Ersetzungsregeln erlaubt.");
+                if (++count > 1000) throw new InvalidDataException(L.T("At most 1,000 replacement rules are allowed."));
                 if (String.IsNullOrEmpty(r.Source)) continue;
                 text = UnicodeReplacement.Apply(text, r);
-                if (Encoding.UTF8.GetByteCount(text) > Limit) throw new InvalidDataException("Das Wörterbuch erzeugt zu viel Text. Das ursprüngliche Diktat bleibt im Verlauf.");
+                if (Encoding.UTF8.GetByteCount(text) > Limit) throw new InvalidDataException(L.T("The dictionary produces too much text. The original dictation stays in History."));
             }
             return text;
         }

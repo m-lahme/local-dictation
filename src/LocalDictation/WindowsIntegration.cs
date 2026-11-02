@@ -24,7 +24,7 @@ namespace LocalDictation
             process = new Process { StartInfo = info, EnableRaisingEvents = true };
             process.OutputDataReceived += (s, e) => { if (e.Data == null || disposed) return; try { if (JsonLite.Value(e.Data, "event") == "model" && JsonLite.Value(e.Data, "state") == "ready") Ready = true; Event?.Invoke(e.Data); } catch (Exception ex) { Storage.Log("worker protocol: " + ex.Message); } };
             process.ErrorDataReceived += (s, e) => { if (e.Data != null) Storage.Log("native: " + e.Data); };
-            process.Exited += (s, e) => { if (!disposed) Event?.Invoke(JsonSerializer.Serialize(new { @event = "crash", message = "Das Modell wurde unerwartet beendet." })); };
+            process.Exited += (s, e) => { if (!disposed) Event?.Invoke(JsonSerializer.Serialize(new { @event = "crash", message = L.T("The model quit unexpectedly.") })); };
             process.Start(); process.StandardInput.AutoFlush = true; process.BeginOutputReadLine(); process.BeginErrorReadLine();
         }
         public Task Transcribe(float[] audio, int id) { return Task.Run(() => { byte[] bytes = new byte[audio.Length * 4]; Buffer.BlockCopy(audio, 0, bytes, 0, bytes.Length); lock (writeGate) { if (disposed) throw new ObjectDisposedException("Worker"); process.StandardInput.WriteLine(JsonSerializer.Serialize(new { command = "transcribe", id, audio = Convert.ToBase64String(bytes) })); } }); }
@@ -44,9 +44,9 @@ namespace LocalDictation
             {
                 string output = await process.StandardOutput.ReadToEndAsync(timeout.Token); await process.WaitForExitAsync(timeout.Token);
                 foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries)) { try { if (JsonLite.Value(line, "event") != "probe") continue; return JsonLite.Value(line, "state") == "available" ? null : JsonLite.Value(line, "message"); } catch (JsonException) { } }
-                return "Die GPU-Prüfung hat kein Ergebnis geliefert.";
+                return "The GPU probe returned no result.";
             }
-            catch (OperationCanceledException) { try { process.Kill(true); } catch { } return "Die GPU-Prüfung hat nicht geantwortet."; }
+            catch (OperationCanceledException) { try { process.Kill(true); } catch { } return "The GPU probe did not respond."; }
         }
     }
     public static class OneShotTranscriber
@@ -152,7 +152,7 @@ namespace LocalDictation
         {
             try {
                 if(mode==OutputMode.Clipboard) { Clipboard.SetText(text); started?.Invoke(); return new DeliveryResult { Success=true, Method="clipboard" }; }
-                if(!ModifiersReleased())return new DeliveryResult { Error="Lass die gedrückten Zusatztasten los und versuche es erneut. Das Diktat bleibt im Verlauf." };
+                if(!ModifiersReleased())return new DeliveryResult { Error=L.T("Release the held modifier keys and try again. The dictation stays in History.") };
                 if(mode==OutputMode.Both) { Clipboard.SetText(text); bool pasted=Paste(out string error,started);return new DeliveryResult{Success=pasted,Error=error,Method="paste-and-keep"}; }
                 if(!ClipboardTransfer.HasPending) {
                     using(var transfer=new ClipboardTransfer()) {
@@ -162,7 +162,7 @@ namespace LocalDictation
                 }
                 // Unsupported clipboard formats stay completely untouched.
                 started?.Invoke(); bool sent=DeliverUnicode(text,out string message);return new DeliveryResult{Success=sent,Error=message,Method="unicode-fallback"};
-            }catch(Exception ex){Storage.Log("output delivery: "+ex.Message);return new DeliveryResult{Error="Der Text konnte nicht ausgegeben werden und bleibt im Verlauf."};}
+            }catch(Exception ex){Storage.Log("output delivery: "+ex.Message);return new DeliveryResult{Error=L.T("The text could not be output and stays in History.")};}
         }
         public static bool ModifiersReleased() { foreach(int key in new[]{0x11,0x10,0x12,0x5B,0x5C})if((GetAsyncKeyState(key)&0x8000)!=0)return false;return true; }
         // Text that could not be inserted stays on the clipboard so Ctrl+V works without opening the history.
@@ -174,24 +174,24 @@ namespace LocalDictation
             return SendInput(4,keys,Marshal.SizeOf<INPUT>())==4;
         }
         public static bool Paste(out string error,Action started=null) {
-            error="";if(!ModifiersReleased()){error="Lass die gedrückten Zusatztasten los und versuche es erneut. Das Diktat bleibt im Verlauf.";return false;}
+            error="";if(!ModifiersReleased()){error=L.T("Release the held modifier keys and try again. The dictation stays in History.");return false;}
             var keys=new[]{Virtual(0x11,0),Virtual(0x56,0),Virtual(0x56,2),Virtual(0x11,2)};
             started?.Invoke();
             if(SendInput(4,keys,Marshal.SizeOf<INPUT>())==4)return true;
             // Balance modifiers if Windows accepted only a prefix.
             SendInput(2,new[]{Virtual(0x56,2),Virtual(0x11,2)},Marshal.SizeOf<INPUT>());
-            error="Der Text konnte nicht eingefügt werden und bleibt im Verlauf.";return false;
+            error=L.T("The text could not be inserted and stays in History.");return false;
         }
         public static bool DeliverUnicode(string text, out string error)
         {
             error = ""; try
             {
-                foreach (int key in new[] { 0x11, 0x10, 0x12, 0x5B, 0x5C }) if ((GetAsyncKeyState(key) & 0x8000) != 0) { error = "Lass die gedrückten Zusatztasten los und versuche es erneut. Das Diktat bleibt im Verlauf."; return false; }
+                foreach (int key in new[] { 0x11, 0x10, 0x12, 0x5B, 0x5C }) if ((GetAsyncKeyState(key) & 0x8000) != 0) { error = L.T("Release the held modifier keys and try again. The dictation stays in History."); return false; }
                 // Unicode input never opens or replaces the clipboard, including images and private formats.
                 var inputs=new List<INPUT>();
                 bool Flush(){if(inputs.Count==0)return true;var batch=inputs.ToArray();inputs.Clear();return SendInput((uint)batch.Length,batch,Marshal.SizeOf<INPUT>())==batch.Length;}
-                foreach(char c in text){if(c=='\r')continue;if(c=='\n'){inputs.Add(Virtual(0x0D,0));inputs.Add(Virtual(0x0D,2));}else{inputs.Add(Key(c,4));inputs.Add(Key(c,6));}if(inputs.Count>=256&&!Flush()){error="Der Text konnte nicht vollständig eingefügt werden. Das Diktat bleibt im Verlauf.";return false;}}
-                if(!Flush()){error="Der Text konnte nicht vollständig eingefügt werden. Das Diktat bleibt im Verlauf.";return false;}
+                foreach(char c in text){if(c=='\r')continue;if(c=='\n'){inputs.Add(Virtual(0x0D,0));inputs.Add(Virtual(0x0D,2));}else{inputs.Add(Key(c,4));inputs.Add(Key(c,6));}if(inputs.Count>=256&&!Flush()){error=L.T("The text could not be inserted completely. The dictation stays in History.");return false;}}
+                if(!Flush()){error=L.T("The text could not be inserted completely. The dictation stays in History.");return false;}
                 return true;
             }
             catch (Exception ex) { error = ex.Message; return false; }

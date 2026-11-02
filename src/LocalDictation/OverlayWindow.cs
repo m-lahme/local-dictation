@@ -24,14 +24,14 @@ namespace LocalDictation
         public event Action MenuRequested; public event Action IdleReached;
         public AppState State { get { return state; } }
         public static string Description(AppState value) => value switch {
-            AppState.Idle => "Bereit",
-            AppState.Recording => "Aufnahme",
-            AppState.Waiting => "Modell wird geladen",
-            AppState.Transcribing => "Transkription",
-            AppState.Success => "Text ausgegeben",
-            AppState.Review => "Text ausgegeben · bitte kurz prüfen",
-            AppState.Error => "Fehler, siehe Verlauf oder Einstellungen",
-            AppState.Copied => "Nicht eingefügt · Text liegt in der Zwischenablage",
+            AppState.Idle => L.T("Ready"),
+            AppState.Recording => L.T("Recording"),
+            AppState.Waiting => L.T("Loading model"),
+            AppState.Transcribing => L.T("Transcribing"),
+            AppState.Success => L.T("Text delivered"),
+            AppState.Review => L.T("Text delivered · please review"),
+            AppState.Error => L.T("Error, see History or Settings"),
+            AppState.Copied => L.T("Not inserted · text is on the clipboard"),
             _ => "Local Dictation"
         };
         static readonly double[] IdleH = { 3, 3, 3, 3, 3 }, IdleY = { 0, 0, 0, 0, 0 }, MeterH = { 7, 13, 19, 13, 7 }, CheckH = { 5, 5, 5, 5, 5 }, CheckY = { 2, 6, 3, -1, -5 }, ErrorH = { 11, 4, 16, 4, 11 };
@@ -45,7 +45,7 @@ namespace LocalDictation
             meter = new Grid { Width = 21, Height = 22, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             for (int i = 0; i < 5; i++) { bars[i] = new Rectangle { Width = 3, Height = 3, RadiusX = 1.5, RadiusY = 1.5, Fill = new SolidColorBrush(), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(i * 4.5, 0, 0, 0), RenderTransform = new TranslateTransform() }; meter.Children.Add(bars[i]); }
             noticeIcon = new TextBlock { Text = "", FontFamily = Theme.IconFont, FontSize = 16, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 9, 0) };
-            noticeText = new TextBlock { Text = "Nicht eingefügt · Strg+V", FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+            noticeText = new TextBlock { FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
             notice = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed, Children = { noticeIcon, noticeText } };
             shell.Child = new Grid { Children = { meter, notice } };
             MouseLeftButtonDown += (s, e) => { down = PointToScreen(e.GetPosition(this)); startLeft = Left; startTop = Top; dragging = false; CaptureMouse(); };
@@ -58,11 +58,12 @@ namespace LocalDictation
         public void ApplyTheme(string mode) { theme = mode; bool dark = Theme.IsDark(mode); shell.Background = Theme.Brush(dark ? Color.FromRgb(22, 24, 29) : Color.FromRgb(255, 254, 251)); shell.BorderBrush = Theme.Brush(dark ? Color.FromRgb(49, 52, 61) : Color.FromRgb(214, 210, 202)); noticeIcon.Foreground = Theme.Brush(dark ? Color.FromRgb(91, 156, 240) : Color.FromRgb(37, 99, 190)); noticeText.Foreground = Theme.Brush(dark ? Color.FromRgb(232, 233, 236) : Color.FromRgb(30, 31, 36)); StartFrames(); }
         public void SetState(AppState next, double level) {
             feedback.Stop(); state = next; phase = 0; targetLevel = Math.Clamp(level,0,1);for(int i=0;i<5;i++)targetBands[i]=targetLevel;
-            ToolTip = Description(next);
-            System.Windows.Automation.AutomationProperties.SetName(this, "Local Dictation: " + ToolTip); Layout(next == AppState.Copied, SystemParameters.ClientAreaAnimation); StartFrames();
+            RefreshText(); Layout(next == AppState.Copied, SystemParameters.ClientAreaAnimation); StartFrames();
             if (next == AppState.Success || next == AppState.Review || next == AppState.Error || next == AppState.Copied) { feedback.Interval = TimeSpan.FromMilliseconds(next == AppState.Copied ? 5000 : next == AppState.Error ? 4000 : 2600); feedback.Start(); }
             if (next == AppState.Idle) IdleReached?.Invoke();
         }
+        // Also called after a language change, so tooltip, accessible name and notice follow the new language.
+        public void RefreshText() { ToolTip = Description(state); System.Windows.Automation.AutomationProperties.SetName(this, "Local Dictation: " + ToolTip); noticeText.Text = L.T("Not inserted · Ctrl+V"); }
         public void SetLevels(double[] levels) {if(state!=AppState.Recording)return;for(int i=0;i<5;i++)targetBands[i]=double.IsFinite(levels[i])?Math.Clamp(levels[i],0,1):0;StartFrames();}
         public void SetLevel(double level) { if (state == AppState.Recording) { targetLevel = double.IsFinite(level) ? Math.Clamp(level,0,1) : 0;double[] shape={.58,.83,1,.65,.9};for(int i=0;i<5;i++)targetBands[i]=targetLevel*shape[i];StartFrames(); } }
         void StartFrames() {

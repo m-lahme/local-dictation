@@ -49,6 +49,17 @@ internal static class CorrectionLearningAudit
         var normalized = CorrectionLearning.Analyze("Cafe\u0301 ist offen.", "Café ist offen.");
         Check(normalized.Accepted && normalized.Suggestions.Count == 0, "canonical Unicode normalization avoids false rule");
 
+        Check(typo.Message == "1 rule suggested." && typo.Suggestions[0].Reason == "Word corrected" && unicode.Message == "2 rules suggested.", "suggestion messages are English in the English UI");
+        Check(rewrite.Message.StartsWith("The selection is not similar enough") && duplicate.Suggestions[0].Reason == "Another rule already exists for this expression", "rejection and conflict reasons are English");
+        string language = L.Language; L.Language = "de";
+        try
+        {
+            var german = CorrectionLearning.Analyze("Parakeet ist schnell.", "Paraket ist schnell.");
+            Check(german.Message == "1 Regel vorgeschlagen." && german.Suggestions[0].Reason == "Wort korrigiert", "suggestion messages keep the German wording");
+            Check(CorrectionLearning.Analyze("Hallo", "").Message == "Für den Vergleich werden der eingefügte und der korrigierte Text benötigt.", "missing text keeps the German wording");
+        }
+        finally { L.Language = language; }
+
         var editable = typo.Suggestions[0]; editable.Whole = false; editable.CaseSensitive = true;
         var rule = editable.ToRule();
         Check(!rule.Whole && rule.CaseSensitive && rule.Source == editable.Source && rule.Target == editable.Target, "editable suggestion converts to replacement rule");

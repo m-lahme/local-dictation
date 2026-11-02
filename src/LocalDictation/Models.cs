@@ -58,7 +58,7 @@ namespace LocalDictation
         {
             long offset = File.Exists(partial) ? new FileInfo(partial).Length : 0; if (offset >= f.size) { File.Delete(partial); offset = 0; }
             EnsureSpace(Path.GetDirectoryName(partial), f.size - offset, modelName);
-            progress(modelName + (offset > 0 ? " wird weiter heruntergeladen …" : " wird heruntergeladen …"));
+            progress(offset > 0 ? L.F("Resuming the download of {0} …", modelName) : L.F("Downloading {0} …", modelName));
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(token); idle.CancelAfter(StallTimeout);
             using var request = new HttpRequestMessage(HttpMethod.Get, f.url); if (offset > 0) request.Headers.Range = new RangeHeaderValue(offset, null);
             HttpResponseMessage response; try { response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, idle.Token); } catch (OperationCanceledException ex) when (!token.IsCancellationRequested) { throw new TimeoutException("Keine Antwort vom Download-Server.", ex); }
@@ -79,7 +79,7 @@ namespace LocalDictation
                         if (n == 0) break;
                         if ((total += n) > f.size) throw new InvalidDataException("Der Modelldownload ist größer als erwartet: " + f.file);
                         await output.WriteAsync(buffer.AsMemory(0, n), token);
-                        if (total - last > 8 * 1024 * 1024) { progress(modelName + " wird heruntergeladen · " + (total * 100 / Math.Max(1, f.size)) + " %"); last = total; }
+                        if (total - last > 8 * 1024 * 1024) { progress(L.F("Downloading {0} · {1}%", modelName, total * 100 / Math.Max(1, f.size))); last = total; }
                     }
                     if (total < f.size) throw new HttpRequestException("Der Download wurde vorzeitig beendet: " + f.file);
                 }
@@ -89,24 +89,24 @@ namespace LocalDictation
         static void EnsureSpace(string dir, long needed, string modelName)
         {
             DriveInfo drive; long free; try { drive = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(dir))); free = drive.AvailableFreeSpace; } catch (Exception) { return; }
-            if (free < needed + SpaceReserve) throw new ModelDownloadException("Zu wenig freier Speicherplatz für " + modelName + ": Benötigt werden noch etwa " + Megabytes(needed + SpaceReserve) + " MB, auf " + drive.Name + " sind " + Megabytes(free) + " MB frei.");
+            if (free < needed + SpaceReserve) throw new ModelDownloadException(L.F("Not enough free disk space for {0}: about {1:N0} MB more is needed, {2} has {3:N0} MB free.", modelName, Megabytes(needed + SpaceReserve), drive.Name, Megabytes(free)));
         }
-        static string Megabytes(long bytes) => ((bytes + 1024 * 1024 - 1) / (1024 * 1024)).ToString("N0");
+        static long Megabytes(long bytes) => (bytes + 1024 * 1024 - 1) / (1024 * 1024);
         public static string Describe(Exception ex, string modelName)
         {
             if (ex is ModelDownloadException) return ex.Message;
-            if (ex is TimeoutException || ex is OperationCanceledException) return "Der Download von " + modelName + " ist ins Stocken geraten. Prüfe die Internetverbindung und versuche es erneut; bereits geladene Teile werden weiterverwendet.";
+            if (ex is TimeoutException || ex is OperationCanceledException) return L.F("The download of {0} has stalled. Check the internet connection and try again; parts already downloaded will be reused.", modelName);
             if (ex is HttpRequestException web)
             {
-                if (web.StatusCode == HttpStatusCode.ProxyAuthenticationRequired) return "Der Proxy-Server verlangt eine Anmeldung, die nicht automatisch möglich ist. " + modelName + " konnte nicht heruntergeladen werden.";
-                if (web.StatusCode is HttpStatusCode code) return "Der Download-Server hat " + modelName + " nicht geliefert (HTTP " + (int)code + "). Versuche es später erneut.";
-                return "Keine Verbindung zum Download-Server. Prüfe die Internetverbindung und versuche es erneut; bereits geladene Teile werden weiterverwendet.";
+                if (web.StatusCode == HttpStatusCode.ProxyAuthenticationRequired) return L.F("The proxy server requires a sign-in that cannot happen automatically. {0} could not be downloaded.", modelName);
+                if (web.StatusCode is HttpStatusCode code) return L.F("The download server did not deliver {0} (HTTP {1}). Try again later.", modelName, (int)code);
+                return L.T("No connection to the download server. Check the internet connection and try again; parts already downloaded will be reused.");
             }
-            if (ex is InvalidDataException) return "Der Download von " + modelName + " war beschädigt und wurde verworfen. Versuche es erneut.";
-            if (ex is UnauthorizedAccessException) return "Kein Schreibzugriff auf den Modellordner " + Root + ".";
-            if (ex is IOException && (ex.HResult & 0xFFFF) is 0x27 or 0x70) return "Zu wenig freier Speicherplatz für " + modelName + ". Gib Speicherplatz frei und versuche es erneut.";
-            if (ex is IOException) return modelName + " konnte nicht gespeichert werden: " + ex.Message;
-            return modelName + " konnte nicht heruntergeladen werden: " + ex.Message;
+            if (ex is InvalidDataException) return L.F("The download of {0} was damaged and has been discarded. Try again.", modelName);
+            if (ex is UnauthorizedAccessException) return L.F("No write access to the model folder {0}.", Root);
+            if (ex is IOException && (ex.HResult & 0xFFFF) is 0x27 or 0x70) return L.F("Not enough free disk space for {0}. Free up some space and try again.", modelName);
+            if (ex is IOException) return L.F("{0} could not be saved: {1}", modelName, ex.Message);
+            return L.F("{0} could not be downloaded: {1}", modelName, ex.Message);
         }
         // The stamp records size, write time and hash of a fully verified file, so later starts skip hashing several hundred megabytes.
         static string StampPath(string path) => path + ".verified";
@@ -119,7 +119,7 @@ namespace LocalDictation
         {
             using (var input = File.OpenRead(path)) { if (!Convert.ToHexString(await SHA256.HashDataAsync(input, token)).Equals(f.sha256, StringComparison.OrdinalIgnoreCase)) { if (stamp) Unstamp(path); return false; } if (stamp) Stamp(path, f); return true; }
         }
-        public static async Task Verify(string engine) { await Task.Run(() => { foreach (var f in Catalog.Where(x => x.engine == engine)) { string path = Path.Combine(Root, f.engine, f.file); using (var input = File.OpenRead(path)) { var hash = Convert.ToHexString(SHA256.HashData(input)); if (!hash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase)) { Unstamp(path); throw new InvalidDataException("Modelldatei beschädigt: " + f.file + ". „Herunterladen / prüfen“ lädt sie neu."); } Stamp(path, f); } } }); }
-        public static void Remove(string engine) { if (!gate.Wait(0)) throw new InvalidOperationException("Bitte den laufenden Modelldownload abwarten."); try { foreach (var f in Catalog.Where(x => x.engine == engine)) { var path = Path.Combine(Root, f.engine, f.file); foreach (var file in new[] { path, StampPath(path), path + ".partial" }) if (File.Exists(file)) File.Delete(file); } } finally { gate.Release(); } }
+        public static async Task Verify(string engine) { await Task.Run(() => { foreach (var f in Catalog.Where(x => x.engine == engine)) { string path = Path.Combine(Root, f.engine, f.file); using (var input = File.OpenRead(path)) { var hash = Convert.ToHexString(SHA256.HashData(input)); if (!hash.Equals(f.sha256, StringComparison.OrdinalIgnoreCase)) { Unstamp(path); throw new InvalidDataException(L.F("Model file damaged: {0}. “{1}” downloads it again.", f.file, L.T("Download / verify"))); } Stamp(path, f); } } }); }
+        public static void Remove(string engine) { if (!gate.Wait(0)) throw new InvalidOperationException(L.T("Please wait for the running model download to finish.")); try { foreach (var f in Catalog.Where(x => x.engine == engine)) { var path = Path.Combine(Root, f.engine, f.file); foreach (var file in new[] { path, StampPath(path), path + ".partial" }) if (File.Exists(file)) File.Delete(file); } } finally { gate.Release(); } }
     }
 }

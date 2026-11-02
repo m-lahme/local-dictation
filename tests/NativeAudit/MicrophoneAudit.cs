@@ -37,7 +37,11 @@ internal static class MicrophoneAudit
         Check(MicrophoneCatalog.Details(Entry(laptop)).EndsWith("· Cirrus Logic XU"), "internal details name hardware without Windows index");
         var renamed = Entry(dock); renamed.Description = "Dock-Mikrofon";
         Equal("Dock-Mikrofon", MicrophoneCatalog.Title(renamed), "renamed endpoint keeps the user's name");
-        Equal("USB-Audiogerät", MicrophoneCatalog.Details(Entry(dock)), "generic USB device avoids repeated USB label");
+        Equal("USB audio device", MicrophoneCatalog.Details(Entry(dock)), "generic USB device avoids repeated USB label");
+        Equal("Headset · Audio jack · Cirrus Logic XU", MicrophoneCatalog.Details(Entry(jack)), "combo jack headset names the connection");
+        string language = L.Language; L.Language = "de";
+        try { Equal("USB-Audiogerät", MicrophoneCatalog.Details(Entry(dock)), "microphone labels keep the German wording"); Equal("Headset · Klinke · Cirrus Logic XU", MicrophoneCatalog.Details(Entry(jack)), "German connection label"); }
+        finally { L.Language = language; }
 
         var found = new List<MicrophoneInfo> { laptop, jack, webcam, webcamOffload, bluetooth, headset, dock, yeti, mix };
         var initial = MicrophonePriority.Initial("", found);

@@ -56,13 +56,13 @@ namespace LocalDictation
             corrected = (corrected ?? "").Normalize(NormalizationForm.FormC);
             minimumSimilarity = Math.Clamp(minimumSimilarity, 0, 1);
             if (String.IsNullOrWhiteSpace(original) || String.IsNullOrWhiteSpace(corrected))
-                return Rejected("Für den Vergleich werden der eingefügte und der korrigierte Text benötigt.");
+                return Rejected(L.T("The comparison needs both the inserted and the corrected text."));
 
             var before = Tokenize(original); var after = Tokenize(corrected);
             var matches = MyersMatches(before, after);
             double similarity = Similarity(before, after, matches);
             if (similarity < minimumSimilarity)
-                return new CorrectionAnalysis { Similarity = similarity, Message = "Die Auswahl ähnelt dem letzten Diktat nicht genug. Markiere den gesamten korrigierten Text." };
+                return new CorrectionAnalysis { Similarity = similarity, Message = L.T("The selection is not similar enough to the last dictation. Select the entire corrected text.") };
 
             var suggestions = new List<RuleSuggestion>();
             int bi = 0, ai = 0;
@@ -73,7 +73,7 @@ namespace LocalDictation
                 {
                     var left = before[match.Original]; var right = after[match.Corrected];
                     if (left.Kind == TokenKind.Word && left.Value != right.Value && !IsSentenceStart(before, match.Original))
-                        suggestions.Add(NewSuggestion(left.Value, right.Value, true, "Groß- und Kleinschreibung angepasst"));
+                        suggestions.Add(NewSuggestion(left.Value, right.Value, true, L.T("Capitalization adjusted")));
                 }
                 bi = match.Original + 1; ai = match.Corrected + 1;
             }
@@ -93,7 +93,7 @@ namespace LocalDictation
             {
                 Accepted = true,
                 Similarity = similarity,
-                Message = suggestions.Count == 0 ? "Keine geeigneten Wörterbuchregeln gefunden." : suggestions.Count + (suggestions.Count == 1 ? " Regel vorgeschlagen." : " Regeln vorgeschlagen."),
+                Message = suggestions.Count == 0 ? L.T("No suitable dictionary rules found.") : suggestions.Count == 1 ? L.F("{0} rule suggested.", suggestions.Count) : L.F("{0} rules suggested.", suggestions.Count),
                 Suggestions = suggestions
             };
         }
@@ -179,7 +179,7 @@ namespace LocalDictation
             bool simple = oldWords.Count == 1 && newWords.Count == 1;
             bool splitOrJoin = !simple && String.Equals(String.Concat(oldWords.Select(x => x.Value)), String.Concat(newWords.Select(x => x.Value)), StringComparison.OrdinalIgnoreCase);
             bool selected = newWords.Count>0&&(simple ? likeness >= .35 : splitOrJoin || oldWords.Count <= 3 && newWords.Count <= 3 && likeness >= .35);
-            string reason = newWords.Count==0?"Entfernung vorgeschlagen · bitte prüfen":simple ? "Wort korrigiert" : splitOrJoin ? "Getrennt- oder Zusammenschreibung korrigiert" : "Mehrere Wörter geändert · bitte prüfen";
+            string reason = newWords.Count==0?L.T("Removal suggested · please check"):simple ? L.T("Word corrected") : splitOrJoin ? L.T("Split or joined words corrected") : L.T("Several words changed · please check");
             output.Add(NewSuggestion(source, target, selected, reason));
         }
 
@@ -195,7 +195,7 @@ namespace LocalDictation
             int oldWords=Tokenize(source).Count(x=>x.Kind==TokenKind.Word),newWords=Tokenize(target).Count(x=>x.Kind==TokenKind.Word);if(oldWords>10||newWords>10)return;
             if(output.Any(x=>String.Equals(x.Source,source,StringComparison.Ordinal)&&String.Equals(x.Target,target,StringComparison.Ordinal)))return;
             bool compactNotation=newWords>0&&oldWords<=3&&newWords<=3&&source.Length>0&&!Char.IsLetterOrDigit(source[0]);
-            output.Add(NewSuggestion(source,target,compactNotation,"Schreibweise oder kurze Wortgruppe geändert"));
+            output.Add(NewSuggestion(source,target,compactNotation,L.T("Spelling or short phrase changed")));
         }
 
         static string Slice(string text, List<Token> tokens, int start, int end) => start < end ? text.Substring(tokens[start].Start, tokens[end - 1].End - tokens[start].Start) : "";
@@ -247,7 +247,7 @@ namespace LocalDictation
                 if (!seen.Add(key)) continue;
                 var sameSource = rules.Where(x => x.Whole == suggestion.Whole && x.CaseSensitive == suggestion.CaseSensitive && String.Equals((x.Source ?? "").Normalize(NormalizationForm.FormC), suggestion.Source, StringComparison.OrdinalIgnoreCase)).ToList();
                 if (sameSource.Any(x => String.Equals((x.Target ?? "").Normalize(NormalizationForm.FormC), suggestion.Target, StringComparison.Ordinal))) continue;
-                if (sameSource.Count > 0) { suggestion.ConflictsWithExisting = true; suggestion.Selected = false; suggestion.Reason = "Für diesen Ausdruck gibt es bereits eine andere Regel"; }
+                if (sameSource.Count > 0) { suggestion.ConflictsWithExisting = true; suggestion.Selected = false; suggestion.Reason = L.T("Another rule already exists for this expression"); }
                 result.Add(suggestion);
             }
             return result;

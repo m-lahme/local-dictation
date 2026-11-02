@@ -72,6 +72,10 @@ _Avoid_: App readiness, capture readiness
 The language inferred from a Dictation by the active transcription model. V1 does not ask the user to choose a language before dictating; the languages that can be recognized depend on the active model's native capabilities.
 _Avoid_: Selected language, configured language
 
+**UI language**:
+The language of Local Dictation's own labels, messages and menus, either English or German. It follows the Windows display language unless the user chooses one; any other display language falls back to English. It does not influence the Transcription language.
+_Avoid_: Locale, dictation language
+
 **Model package**:
 A downloadable form of a transcription model with particular quality and resource characteristics. Multiple Model packages may provide the same transcription model; V1 presents their practical trade-offs rather than requiring users to understand internal quantization names.
 _Avoid_: Quantization option, model file

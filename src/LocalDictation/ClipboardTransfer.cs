@@ -110,13 +110,13 @@ namespace LocalDictation
             try {
                 if(!ClipboardInserter.Paste(out string error,started)){result.Error=error;return result;}
                 var completed=await Task.WhenAny(requested.Task,Task.Delay(2500));
-                if(completed!=requested.Task) { result.Signals+=" reader=none";result.Error="Der Text konnte nicht eingefügt werden und bleibt im Verlauf.";return result; }
+                if(completed!=requested.Task) { result.Signals+=" reader=none";result.Error=L.T("The text could not be inserted and stays in History.");return result; }
                 bool targetRead=await requested.Task;result.Signals+=" reader="+(targetRead?"target":ProcessName(readerPid));
-                if(!caret && input==false) { result.Error="Es war kein Textfeld aktiv.";return result; }
+                if(!caret && input==false) { result.Error=L.T("No text field was active.");return result; }
                 // The render message establishes retrieval, not completion of the target's entire edit operation.
                 await Task.Delay(targetRead?180:1000);
                 result.Success=true;return result;
-            } finally { if(!await RestoreAsync()) { result.Success=false;result.Error="Text eingefügt. Die bisherige Zwischenablage wird gleich wiederhergestellt."; } }
+            } finally { if(!await RestoreAsync()) { result.Success=false;result.Error=L.T("Text inserted. The previous clipboard will be restored shortly."); } }
         }
         public bool RestoreNow() {
             if(!replaced)return true;
