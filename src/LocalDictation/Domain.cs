@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace LocalDictation
 {
-    public enum AppState { Idle, Recording, Waiting, Transcribing, Success, Review, Error }
+    public enum AppState { Idle, Recording, Waiting, Transcribing, Success, Review, Error, Copied }
     public enum OutputMode { Insert, Clipboard, Both }
     public static class SidebarStatus
     {
@@ -127,5 +127,7 @@ namespace LocalDictation
         public string Down(long now) { if (pressed) return ""; pressed = true; started = now; stopping = toggle; if (toggle) { toggle = false; return now-lastTapReleased<=DoubleTapMs?"correction":"stop"; } return "start"; }
         public string Up(long now) { if (!pressed) return ""; pressed = false; if (stopping) { stopping = false; return ""; } if (now - started >= HoldMs) { toggle = false; return "stop"; } toggle = true; lastTapReleased=now; return ""; }
         public void Reset() { pressed = false; stopping = false; toggle = false; lastTapReleased=Int64.MinValue; }
+        // Forgets a press whose release was never seen, keeping a running start-stop dictation.
+        public void Release() { pressed = false; stopping = false; }
     }
 }

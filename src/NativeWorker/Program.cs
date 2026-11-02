@@ -16,15 +16,17 @@ internal static class Program
     {
         Console.InputEncoding = Encoding.UTF8; Console.OutputEncoding = new UTF8Encoding(false);
         string Get(string key, string fallback) { var i = Array.IndexOf(args, key); return i >= 0 && i + 1 < args.Length ? args[i + 1] : fallback; }
+        // Quick check without loading a model, used by the app to return to Whisper once the GPU is available again.
+        if (args.Contains("--probe")) { try { VisualCppRuntime.Require(); Emit(new { @event = "probe", state = "available", adapter = VulkanDevice.SelectDiscrete() }); } catch (Exception ex) { Emit(new { @event = "probe", state = "unavailable", message = ex.Message }); } return 0; }
         string engine = Get("--engine", "whisper"), device = Get("--device", "cpu");
         string depot = Get("--models", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalDictation", "native-models"));
         try
         {
             if (engine == "whisper" && device != "gpu") throw new InvalidOperationException("Whisper auf der CPU ist deaktiviert. Verwende Whisper/GPU oder Parakeet/CPU.");
-            using var logger = Whisper.net.Logger.LogProvider.AddLogger((level, message) => Console.Error.Write(message)); var load = Stopwatch.StartNew();
+            using var logger = Whisper.net.Logger.LogProvider.AddLogger((level, message) => { Console.Error.Write(message); WhisperLog.Add(message); }); var load = Stopwatch.StartNew();
             Emit(new { @event = "model", state = "loading", engine });
             using var backend = new Backend(engine, device, depot);
-            if (engine == "whisper" && device == "gpu") await backend.Transcribe(new float[16000], true); Emit(new { @event = "model", state = "ready", engine, backend = backend.Name, load_ms = load.ElapsedMilliseconds });
+            await backend.WarmUp(); Emit(new { @event = "model", state = "ready", engine, backend = backend.Name, load_ms = load.ElapsedMilliseconds });
             if (args.Contains("--file"))
             {
                 foreach (var file in Get("--file", "").Split('|'))
@@ -65,20 +67,23 @@ internal static class Program
     sealed class Backend : IDisposable
     {
         const string StylePrompt = "Guten Morgen. Dies ist ein korrekt geschriebener Satz. Good morning. This is a correctly written sentence.";
-        readonly WhisperFactory? factory; readonly WhisperProcessor? whisper; WhisperProcessor? whisperStyle; readonly OfflineRecognizer? parakeet;
+        readonly WhisperFactory? factory; readonly WhisperProcessor? whisper; WhisperProcessor? whisperStyle; readonly OfflineRecognizer? parakeet; readonly string? gpu;
         public string Name { get; }
         public Backend(string engine, string device, string depot)
         {
             if (engine == "whisper")
             {
-                string adapter = device == "gpu" ? VulkanDevice.SelectDiscrete() : "CPU"; RuntimeOptions.RuntimeLibraryOrder = device == "gpu" ? [RuntimeLibrary.Vulkan] : [RuntimeLibrary.Cpu];
-                factory = WhisperFactory.FromPath(Path.Combine(depot, "whisper", "ggml-large-v3-turbo-q5_0.bin"), new WhisperFactoryOptions { UseGpu = device == "gpu", GpuDevice = device == "gpu" ? VulkanDevice.Index : 0, UseFlashAttention = true });
-                whisper = CreateWhisperProcessor();
+                VisualCppRuntime.Require(); string adapter = device == "gpu" ? VulkanDevice.SelectDiscrete() : "CPU"; RuntimeOptions.RuntimeLibraryOrder = device == "gpu" ? [RuntimeLibrary.Vulkan] : [RuntimeLibrary.Cpu];
+                WhisperFactory Load(int index) => WhisperFactory.FromPath(Path.Combine(depot, "whisper", "ggml-large-v3-turbo-q5_0.bin"), new WhisperFactoryOptions { UseGpu = device == "gpu", GpuDevice = index, UseFlashAttention = true });
+                factory = Load(device == "gpu" ? VulkanDevice.Index : 0);
+                // GpuDevice indexes ggml's GPU list, which can skip Vulkan devices. Reload once with ggml's index of the selected adapter.
+                if (device == "gpu" && WhisperLog.IndexOf(adapter) is int index && index != VulkanDevice.Index) { factory.Dispose(); factory = Load(index); }
+                whisper = CreateWhisperProcessor(); gpu = device == "gpu" ? adapter : null;
                 Name = "whisper.cpp / " + RuntimeOptions.LoadedLibrary + " / " + adapter;
             }
             else
             {
-                string FileFor(string name) => Path.Combine(depot, "parakeet", name);
+                string FileFor(string name) { var path = Path.Combine(depot, "parakeet", name); return File.Exists(path) ? path : throw new FileNotFoundException("Parakeet-Modelldatei fehlt: " + path, path); }
                 var config = new OfflineRecognizerConfig();
                 config.FeatConfig.SampleRate = 16000; config.FeatConfig.FeatureDim = 128;
                 config.ModelConfig.Transducer.Encoder = FileFor("encoder.int8.onnx");
@@ -96,6 +101,11 @@ internal static class Program
             var builder = factory!.CreateBuilder().WithLanguage("auto").WithNoContext().WithProbabilities().WithThreads(Math.Min(8, Environment.ProcessorCount));
             if (styled) builder.WithPrompt(StylePrompt).WithCarryInitialPrompt();
             return builder.Build();
+        }
+        public async Task WarmUp()
+        {
+            await Transcribe(new float[16000], true);
+            if (gpu != null && WhisperLog.UsedDevice != gpu) throw new InvalidOperationException("whisper.cpp nutzt " + (WhisperLog.UsedDevice ?? "die CPU") + " statt der GPU " + gpu + ".");
         }
         public async Task<TranscriptResult> Transcribe(float[] audio, bool warmup = false)
         {
@@ -142,7 +152,8 @@ internal static class Program
                 }
                 return TranscriptResult.FromWhisper(chunks, retryAttempted, retryUsed);
             }
-            using var stream = parakeet!.CreateStream(); stream.AcceptWaveform(16000, audio); parakeet.Decode(stream);
+            using var stream = parakeet!.CreateStream(); if (stream.Handle == IntPtr.Zero) throw new InvalidOperationException("Parakeet konnte nicht geladen werden, sherpa-onnx hat die Modelldateien abgelehnt.");
+            stream.AcceptWaveform(16000, audio); parakeet.Decode(stream);
             return TranscriptResult.FromParakeet(stream.Result.Text.Trim());
         }
         static async Task<WhisperPass> ProcessWhisper(float[] audio, WhisperProcessor processor)
@@ -160,6 +171,20 @@ internal static class Program
             return new WhisperPass(text.ToString().Trim(), logSum, tokenCount, lowTokens, segments);
         }
         public void Dispose() { whisperStyle?.Dispose(); whisper?.Dispose(); factory?.Dispose(); parakeet?.Dispose(); }
+    }
+
+    // whisper.cpp silently runs on the CPU when GpuDevice matches no GPU. Its log lists ggml's Vulkan devices and the backend each state really uses.
+    static class WhisperLog
+    {
+        static readonly System.Text.RegularExpressions.Regex Line = new(@"^(?:ggml_vulkan: (?<index>\d+) = (?<name>.+) \([^()]*\) \| uma|whisper_backend_init_gpu: (?:using Vulkan(?<used>\d+) backend|no GPU found))", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.Multiline);
+        static readonly Dictionary<int, string> devices = []; static int used = -1;
+        public static void Add(string? message)
+        {
+            if (message == null) return;
+            lock (devices) foreach (System.Text.RegularExpressions.Match match in Line.Matches(message)) if (match.Groups["name"].Success) devices[int.Parse(match.Groups["index"].Value)] = match.Groups["name"].Value; else used = match.Groups["used"].Success ? int.Parse(match.Groups["used"].Value) : -1;
+        }
+        public static int? IndexOf(string adapter) { lock (devices) return devices.Where(x => x.Value == adapter).Select(x => (int?)x.Key).Min(); }
+        public static string? UsedDevice { get { lock (devices) return used < 0 ? null : devices.GetValueOrDefault(used, "Vulkan" + used); } }
     }
 
     sealed record WhisperPass(string Text, double LogProbabilitySum, int TokenCount, int LowTokens, int SegmentCount);
@@ -194,18 +219,24 @@ internal static class Program
     static class TranscriptQuality
     {
         static readonly System.Text.RegularExpressions.Regex Word = new(@"\p{L}[\p{L}\p{M}\p{N}'’_-]*", System.Text.RegularExpressions.RegexOptions.Compiled);
-        static readonly System.Text.RegularExpressions.Regex SentenceMark = new(@"[.!?…]", System.Text.RegularExpressions.RegexOptions.Compiled);
+        static readonly System.Text.RegularExpressions.Regex SentenceMark = new(@"[.!?…։。！？؟।۔]", System.Text.RegularExpressions.RegexOptions.Compiled);
         public static bool IsLexicalToken(string? text) => !String.IsNullOrWhiteSpace(text) && !text.Contains("<|", StringComparison.Ordinal) && text.Any(Char.IsLetterOrDigit);
         public static int WordCount(string text) => Word.Matches(text).Count;
         public static bool IsSuspicious(string text) => Score(text) >= 2;
         public static int Score(string text)
         {
-            var words = Word.Matches(text); if (words.Count < 15) return 0;
+            var words = Word.Matches(text); if (words.Count < 15 || !UsesLetterCase(text)) return 0;
             int upper = words.Count(x => x.Value.Any(Char.IsUpper)), punctuation = SentenceMark.Matches(text).Count, score = 0;
             if (upper == 0) score += 3;
             if (punctuation == 0 && upper <= 1) score += 3;
             if (HasAnchoredLowCaseRun(text, words)) score += 2;
             return score;
+        }
+        // All style penalties look for missing capitals. Arabic, Hebrew, Indic, CJK and Georgian (Mkhedruli is formally lowercase) text has none to miss.
+        static bool UsesLetterCase(string text)
+        {
+            int letters = 0, cased = 0; foreach (char c in text) if (Char.IsLetter(c)) { letters++; if ((Char.IsUpper(c) || Char.IsLower(c)) && c is < '\u10D0' or > '\u10FF') cased++; }
+            return cased * 2 >= letters;
         }
         static bool HasAnchoredLowCaseRun(string text, System.Text.RegularExpressions.MatchCollection words)
         {

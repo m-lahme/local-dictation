@@ -24,9 +24,12 @@ namespace LocalDictation
         // its TickCount64 epoch, including the 32-bit rollover, before timing gestures.
         // WASAPI startup may block this thread past HoldMs after a short physical tap.
         public static long EventTime(uint timestamp, long processedAt) => processedAt - unchecked((uint)processedAt - timestamp);
-        public Result ProcessEvent(int vk, bool down, uint timestamp, long processedAt) => Process(vk, down, EventTime(timestamp, processedAt));
-        public Result Process(int vk, bool down, long time)
+        public Result ProcessEvent(int vk, bool down, uint timestamp, long processedAt, System.Func<int, bool> held = null) => Process(vk, down, EventTime(timestamp, processedAt), held);
+        // held reports Windows' physical key state. A release the hook never saw would otherwise keep that key
+        // "held" and block the shortcut until it is pressed again; withheld keys never reach Windows' state and stay.
+        public Result Process(int vk, bool down, long time, System.Func<int, bool> held = null)
         {
+            if (down && held != null) keys.RemoveWhere(k => k != vk && !pendingWindows.Contains(k) && !suppressed.Contains(k) && !held(k));
             bool fresh = down ? keys.Add(vk) : keys.Remove(vk);
             bool consume = down ? suppressed.Contains(vk) : suppressed.Remove(vk);
             var replay = new List<int>(); bool replayCurrent = false; string action = "";
@@ -87,6 +90,12 @@ namespace LocalDictation
             gesture.Reset(); checkpoint = gesture.Copy(); provisionalAction = "";
             // Preserve withheld releases across cancellation/completion.
             chord = RequiredHeld;
+        }
+        // Lock screen, Ctrl+Alt+Del and UAC run on a secure desktop whose key releases never reach the hook.
+        public void ClearKeys()
+        {
+            keys.Clear(); pendingWindows.Clear(); claimedWindows.Clear(); suppressed.Clear();
+            if (chord) { chord = false; provisionalAction = ""; gesture.Release(); }
         }
     }
 }

@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Speech
 $dir = Join-Path $PSScriptRoot 'audio'
 New-Item -ItemType Directory -Force $dir | Out-Null

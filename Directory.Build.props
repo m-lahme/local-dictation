@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup><Product>Local Dictation</Product><Authors>Moritz Lahme</Authors><Company>Moritz Lahme</Company><Copyright>Copyright (c) 2026 Moritz Lahme</Copyright><Version>0.2.0</Version><Deterministic>true</Deterministic></PropertyGroup>
+  <!-- Release binaries and PDBs record /_/ instead of the local checkout path; Debug builds keep local paths for the debugger. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'"><PathMap>$(MSBuildThisFileDirectory.Replace(',', ',,').Replace('=', '=='))=/_/</PathMap><DeterministicSourcePaths Condition="Exists('$(MSBuildThisFileDirectory).git')">true</DeterministicSourcePaths></PropertyGroup>
+</Project>

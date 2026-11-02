@@ -25,7 +25,7 @@ The compact topmost surface that communicates the current Dictation state and pr
 _Avoid_: Widget, toolbar
 
 **History entry**:
-The local record of a Dictation that produced transcribed text, consisting of that text, its completion time, transcription model, and completion status. It may also include the detected language when the transcription backend already provides it; recorded audio is not part of a History entry. An entry can be marked incomplete or not inserted when Local Dictation preserved text after an audio or output failure.
+The local record of a Dictation that produced transcribed text, consisting of that text, its completion time, transcription model, and completion status. It may also include the detected language when the transcription backend already provides it. The recorded audio stays available for one hour so the Dictation can be transcribed again with another model; after that only the text remains. An entry can be marked incomplete or not inserted when Local Dictation preserved text after an audio or output failure.
 _Avoid_: Log entry, transcript file
 
 **Transcription history**:

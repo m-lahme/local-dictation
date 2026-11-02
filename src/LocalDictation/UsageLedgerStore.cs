@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -9,7 +10,10 @@ namespace LocalDictation
     public static class UsageLedgerStore
     {
         static readonly object Gate = new object();
+        const string DayFormat = "yyyy-MM-dd";
         static string PathFor(string directory) => Path.Combine(directory, "usage.json");
+        // Day keys are Gregorian whatever calendar the current culture uses.
+        static bool TryParseDay(string text, out DateTime date) => DateTime.TryParseExact(text, DayFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
 
         public static UsageLedger Load(string directory)
         {
@@ -31,7 +35,7 @@ namespace LocalDictation
                 if(complete)return;
                 long retranscriptions=ledger.Total.Retranscriptions;var retryDays=ledger.Days.ToDictionary(x=>x.Date,x=>x.Retranscriptions,StringComparer.Ordinal);ledger=new UsageLedger();
                 foreach (var entry in entries) AddDictation(ledger, entry);
-                ledger.Total.Retranscriptions=retranscriptions;foreach(var pair in retryDays)Day(ledger,DateTime.Parse(pair.Key)).Retranscriptions=pair.Value;
+                ledger.Total.Retranscriptions=retranscriptions;foreach(var pair in retryDays)if(TryParseDay(pair.Key,out var date))Day(ledger,date).Retranscriptions=pair.Value;
                 Trim(ledger, DateTime.UtcNow);
                 Storage.Write(PathFor(directory), ledger);
             }
@@ -59,7 +63,7 @@ namespace LocalDictation
         {
             if (days <= 0) return ledger.Total;
             DateTime first = localNow.Date.AddDays(1 - days);
-            return UsageStatistics.Summarize(ledger.Days.Where(x => DateTime.TryParse(x.Date, out var date) && date.Date >= first));
+            return UsageStatistics.Summarize(ledger.Days.Where(x => TryParseDay(x.Date, out var date) && date >= first && date <= localNow.Date));
         }
 
         static void AddDictation(UsageLedger ledger, HistoryEntry entry)
@@ -74,7 +78,7 @@ namespace LocalDictation
 
         static UsageDay Day(UsageLedger ledger, DateTime localTime)
         {
-            string date = localTime.ToString("yyyy-MM-dd");
+            string date = localTime.ToString(DayFormat, CultureInfo.InvariantCulture);
             var day = ledger.Days.FirstOrDefault(x => x.Date == date);
             if (day == null) { day = new UsageDay { Date = date }; ledger.Days.Add(day); }
             return day;

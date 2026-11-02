@@ -8,6 +8,19 @@ work/
 *.user
 *.suo
 *.log
+*.binlog
+*.dmp
+.idea/
+.vscode/
+TestResults/
+.claude/worktrees/
+
+# App data copied for local benchmarks or debugging
+history.json
+history.tsv
+usage.json
+diagnostics.log*
+history-scrolled.png
 
 # Legacy local environments and generated audit artifacts
 .venv/

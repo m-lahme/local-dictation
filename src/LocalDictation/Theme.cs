@@ -9,8 +9,10 @@ namespace LocalDictation
     public static class Theme
     {
         public static readonly Color Accent = Color.FromRgb(224, 91, 91);
+        // Segoe Fluent Icons ships with Windows 11; Windows 10 has the same code points in Segoe MDL2 Assets.
+        public static readonly FontFamily IconFont = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets");
         public static SolidColorBrush Brush(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
-        public static bool IsDark(string mode) { return mode == "dark" || (mode == "system" && Convert.ToString(Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 0)) == "0"); }
+        public static bool IsDark(string mode) { return mode == "dark" || (mode == "system" && Convert.ToString(Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1)) == "0"); }
         public static void Apply(Control root, string mode)
         {
             bool dark = IsDark(mode);

@@ -20,6 +20,8 @@ namespace LocalDictation
         public static readonly Guid AsusPerformance = new Guid("27fa6203-3987-4dcc-918d-748559d549ec");
         public static readonly Guid AsusTurbo = new Guid("6fecc5ae-f350-48a5-b669-b472cb895ccf");
         public static readonly Guid AsusPdPerformance = new Guid("db6638c8-3605-4d77-aa4d-df84a49947ac");
+        public static readonly Guid AsusPdTurbo = new Guid("62346f4c-22a8-45c0-adf0-24a1cb9f2739");
+        public static readonly Guid AsusPdSilent = new Guid("ee2528d8-0c7d-4ae0-b9c5-45cce8177a45");
         public static readonly Guid PowerSaver = new Guid("a1841308-3541-4fab-bc81-f71556f20b4a");
         public static readonly Guid HighPerformance = new Guid("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c");
         public static readonly Guid UltimatePerformance = new Guid("e9a42b02-d5df-448d-aa00-03f14749eb61");
@@ -30,6 +32,8 @@ namespace LocalDictation
             if (scheme == AsusPerformance) return new ModelRoute("whisper", "gpu", "ASUS Performance");
             if (scheme == AsusTurbo) return new ModelRoute("whisper", "gpu", "ASUS Turbo");
             if (scheme == AsusPdPerformance) return new ModelRoute("whisper", "gpu", "ASUS PD Performance");
+            if (scheme == AsusPdTurbo) return new ModelRoute("whisper", "gpu", "ASUS PD Turbo");
+            if (scheme == AsusPdSilent) return new ModelRoute("parakeet", "cpu", "ASUS PD Leise");
             Guid intent = personality ?? scheme;
             if (intent == PowerSaver) return new ModelRoute("parakeet", "cpu", "Windows Energiesparen");
             if (intent == HighPerformance || intent == UltimatePerformance) return new ModelRoute("whisper", "gpu", "Windows Höchstleistung");

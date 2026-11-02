@@ -18,7 +18,7 @@ namespace LocalDictation
     public sealed class ClipboardPasteResult
     {
         public bool Attempted, Success;
-        public string Error = "";
+        public string Error = "", Signals = "";
     }
     public sealed class ClipboardTransfer : IDisposable
     {
@@ -28,7 +28,7 @@ namespace LocalDictation
         static readonly HashSet<string> SafeNames = new(StringComparer.OrdinalIgnoreCase) { "HTML Format", "text/html", "Rich Text Format", "Rich Text Format Without Objects", "PNG", "image/png", "JFIF", "image/svg+xml", "text/x-moz-url", "UniformResourceLocator", "UniformResourceLocatorW", "Bookmark List", "WebKit Smart Paste Format", "Chromium Web Custom MIME Data Format", "Chromium Pepper MIME Data Format", "Chromium internal source RFH token", "Chromium internal source URL" };
         readonly HwndSource window; readonly TaskCompletionSource<bool> requested = new(TaskCreationOptions.RunContinuationsAsynchronously);
         readonly List<(uint format, IntPtr memory)> restore = new();
-        byte[] text; uint sequence, targetPid; bool replaced, disposing, restoreStarted; static ClipboardTransfer pending; System.Windows.Threading.DispatcherTimer retry;
+        byte[] text; uint sequence, targetPid, readerPid; bool replaced, disposing, restoreStarted; static ClipboardTransfer pending; System.Windows.Threading.DispatcherTimer retry;
         public static bool HasPending => pending!=null;
         public static uint CurrentSequence => GetClipboardSequenceNumber();
         [DllImport("user32.dll", SetLastError=true)] static extern bool OpenClipboard(IntPtr owner);
@@ -86,13 +86,16 @@ namespace LocalDictation
         IntPtr Message(IntPtr hwnd,int msg,IntPtr w,IntPtr l,ref bool handled)
         {
             if(msg==0x305 && (uint)w.ToInt64()==Unicode && text!=null) {
-                try { GetWindowThreadProcessId(GetOpenClipboardWindow(),out uint reader);Put(Unicode,text);sequence=GetClipboardSequenceNumber();requested.TrySetResult(reader==targetPid); }catch(Exception ex){Storage.Log("clipboard render: "+ex.Message);requested.TrySetException(ex);} handled=true;
+                try { GetWindowThreadProcessId(GetOpenClipboardWindow(),out uint reader);readerPid=reader;Put(Unicode,text);sequence=GetClipboardSequenceNumber();requested.TrySetResult(reader==targetPid); }catch(Exception ex){Storage.Log("clipboard render: "+ex.Message);requested.TrySetException(ex);} handled=true;
             }
             return IntPtr.Zero;
         }
+        static string ProcessName(uint id) { try { using var process=Process.GetProcessById((int)id);return process.ProcessName; } catch { return "pid "+id; } }
         public async Task<ClipboardPasteResult> PasteAsync(string value,Action started=null)
         {
-            var result=new ClipboardPasteResult();ClipboardSnapshot backup;int attempts=0;while(!TrySnapshot(out backup)){if(SnapshotReason=="busy" && attempts++<3){await Task.Delay(40);continue;}Storage.Log("clipboard fallback: "+SnapshotReason);return result;}
+            // Browsers and many apps read the clipboard on Ctrl+V even when no text field has focus, so reading alone does not prove insertion.
+            bool caret=SelectionCapture.CaretInForeground();var probe=Task.Run(SelectionCapture.FocusedTextInput);bool? input=await Task.WhenAny(probe,Task.Delay(300))==probe?probe.Result:null;
+            var result=new ClipboardPasteResult{Signals="caret="+caret+" input="+(input?.ToString()??"unknown")};ClipboardSnapshot backup;int attempts=0;while(!TrySnapshot(out backup)){if(SnapshotReason=="busy" && attempts++<3){await Task.Delay(40);continue;}Storage.Log("clipboard fallback: "+SnapshotReason);return result;}
             // Allocate restoration buffers before replacing anything. Preserve format order and exact bytes.
             restore.Add((Exclude,Allocate(new byte[4])));restore.Add((History,Allocate(new byte[4])));restore.Add((Cloud,Allocate(new byte[4])));
             foreach(var f in backup.Formats)if(!IsControl(f.Key))restore.Add((f.Key,Allocate(f.Value)));
@@ -107,8 +110,9 @@ namespace LocalDictation
             try {
                 if(!ClipboardInserter.Paste(out string error,started)){result.Error=error;return result;}
                 var completed=await Task.WhenAny(requested.Task,Task.Delay(2500));
-                if(completed!=requested.Task) { result.Error="Der Text konnte nicht eingefügt werden und bleibt im Verlauf.";return result; }
-                bool targetRead=await requested.Task;
+                if(completed!=requested.Task) { result.Signals+=" reader=none";result.Error="Der Text konnte nicht eingefügt werden und bleibt im Verlauf.";return result; }
+                bool targetRead=await requested.Task;result.Signals+=" reader="+(targetRead?"target":ProcessName(readerPid));
+                if(!caret && input==false) { result.Error="Es war kein Textfeld aktiv.";return result; }
                 // The render message establishes retrieval, not completion of the target's entire edit operation.
                 await Task.Delay(targetRead?180:1000);
                 result.Success=true;return result;

@@ -8,7 +8,7 @@ internal static class MicrophoneAudit
 {
     public static void Run()
     {
-        Equal("USB", MicrophoneCatalog.Bus("{1}.USB\\VID_046D&PID_0944&MI_04\\9&117C71A1&1&0004", "{1}.INTELAUDIO\\CTLR_DEV_E328", "INTELAUDIO"), "offloaded USB endpoint reports USB bus");
+        Equal("USB", MicrophoneCatalog.Bus("{1}.USB\\VID_046D&PID_0944&MI_04\\9&ABCDEF0&0&0004", "{1}.INTELAUDIO\\CTLR_DEV_E328", "INTELAUDIO"), "offloaded USB endpoint reports USB bus");
         Equal("BTHENUM", MicrophoneCatalog.Bus("{1}.BTHENUM\\{0000111E-0000-1000-8000-00805F9B34FB}_HCIBYPASS", "{1}.INTELAUDIO\\CTLR", "INTELAUDIO"), "offloaded Bluetooth endpoint reports Bluetooth bus");
         Equal("SOUNDWIRE", MicrophoneCatalog.Bus("", "{1}.SOUNDWIRE\\SDCA_FUNCTION_10", "SOUNDWIRE"), "parent device names the bus");
         Equal("HDAUDIO", MicrophoneCatalog.Bus("", "", "HDAudio"), "enumerator is the bus fallback");

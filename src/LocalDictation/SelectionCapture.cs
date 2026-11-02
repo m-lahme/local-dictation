@@ -20,10 +20,37 @@ namespace LocalDictation
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
 
+        [StructLayout(LayoutKind.Sequential)] struct GUITHREADINFO { public int size, flags; public IntPtr active, focus, capture, menuOwner, moveSize, caret; public int left, top, right, bottom; }
+        [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GUITHREADINFO info);
+
         public static uint ForegroundProcessId()
         {
             GetWindowThreadProcessId(GetForegroundWindow(), out uint processId);
             return processId;
+        }
+
+        // Text fields own the system caret; browsers and Electron apps create one for accessibility as well.
+        public static bool CaretInForeground()
+        {
+            var info = new GUITHREADINFO { size = Marshal.SizeOf<GUITHREADINFO>() };
+            return GetGUIThreadInfo(GetWindowThreadProcessId(GetForegroundWindow(), out _), ref info) && info.caret != IntPtr.Zero;
+        }
+
+        // Whether the focused element takes typed text; null when UI Automation cannot tell.
+        public static bool? FocusedTextInput()
+        {
+            try
+            {
+                var element = AutomationElement.FocusedElement; if (element == null) return null;
+                if (element.TryGetCurrentPattern(ValuePattern.Pattern, out object value)) return !((ValuePattern)value).Current.IsReadOnly;
+                var type = element.Current.ControlType;
+                if (type == ControlType.Edit) return true;
+                if (type == ControlType.Document || type == ControlType.Pane || type == ControlType.Custom || type == ControlType.Window) return null;
+                return element.TryGetCurrentPattern(TextPattern.Pattern, out _) ? null : false;
+            }
+            catch (ElementNotAvailableException) { return null; }
+            catch (InvalidOperationException) { return null; }
+            catch (COMException) { return null; }
         }
 
         public static async Task<SelectedTextResult> ReadFocusedSelectionAsync()

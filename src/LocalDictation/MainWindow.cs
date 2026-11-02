@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -18,25 +19,28 @@ namespace LocalDictation
         readonly Settings settings; readonly string dataDir; readonly Action<string> changed, engineChanged; readonly Action<HistoryEntry,string> retranscribe;
         Grid root, content; StackPanel nav; TextBlock status; string page = "history", category = "model"; string statusText = "Wird gestartet …";
         string dictionaryQuery="", historyQuery="";
-        Action renderMicrophones, renderRules, pendingRender; bool rowDragging; object focusedRow; List<MicrophoneInfo> microphoneScan = new List<MicrophoneInfo>();
+        Action renderMicrophones, renderRules, pendingRender; bool rowDragging; object focusedRow; List<MicrophoneInfo> microphoneScan = new List<MicrophoneInfo>(); System.Windows.Threading.DispatcherTimer ruleSave;
         public ComboBox FirstSelector; public bool Busy; public event Action RetryRequested; public event Action MicrophonesChanged; public string ActiveMicrophone = "";
         Brush R(string name) => (Brush)Resources[name];
-        public MainWindow(Settings s, string dir, Action<string> onChange, Action<string> onEngine, Action<HistoryEntry,string> onRetranscribe=null) { settings = s; dataDir = dir; changed = onChange; engineChanged = onEngine; retranscribe=onRetranscribe; Title = "Local Dictation"; Width = 1040; Height = 740; MinWidth = 800; MinHeight = 580; WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = new FontFamily("Segoe UI"); FontSize = 14; Theme.Apply(this, s.Theme); SourceInitialized += (a, b) => WindowTheme.Apply(this, settings.Theme); Build(); ShowHistory(); }
+        public MainWindow(Settings s, string dir, Action<string> onChange, Action<string> onEngine, Action<HistoryEntry,string> onRetranscribe=null) { settings = s; dataDir = dir; changed = onChange; engineChanged = onEngine; retranscribe=onRetranscribe; Title = "Local Dictation"; var area = SystemParameters.WorkArea; Width = Math.Min(1040, area.Width - 32); Height = Math.Min(740, area.Height - 32); MinWidth = Math.Min(800, Width); MinHeight = Math.Min(580, Height); WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = new FontFamily("Segoe UI"); FontSize = 14; Theme.Apply(this, s.Theme); SourceInitialized += (a, b) => WindowTheme.Apply(this, settings.Theme); Build(); ShowHistory(); }
         TextBlock T(string text, double size = 14, string color = "Text") => new TextBlock { Text = text, FontSize = size, Foreground = R(color), TextWrapping = TextWrapping.Wrap };
         Button B(string text, Action action) { var b = new Button { Content = text, Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(0, 0, 7, 0) }; AutomationProperties.SetName(b, text); b.Click += (s, e) => { try { action(); } catch (Exception ex) { SetStatus("Die Aktion konnte nicht ausgeführt werden."); MessageBox.Show(this, ex.Message, "Local Dictation"); } }; return b; }
-        void Save() { Storage.SaveSettings(settings); changed(settings.Theme); }
+        void Save() { ruleSave?.Stop(); Storage.SaveSettings(settings); changed(settings.Theme); }
+        // Typing in a rule saves after a short pause, when the field loses focus and on every page change; the settings object is always current.
+        void QueueRuleSave() { if (ruleSave == null) { ruleSave = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) }; ruleSave.Tick += (s, e) => SaveRules(); } ruleSave.Stop(); ruleSave.Start(); }
+        void SaveRules() { if (ruleSave == null || !ruleSave.IsEnabled) return; ruleSave.Stop(); try { Storage.SaveSettings(settings); } catch (Exception ex) { Storage.Log("dictionary save: " + ex.Message); SetStatus("Das Wörterbuch konnte nicht gespeichert werden. Die Änderung bleibt erhalten und wird beim nächsten Speichern übernommen."); } }
         void Build()
         {
             root = new Grid { Background = R("Bg") }; root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(202) }); root.ColumnDefinitions.Add(new ColumnDefinition());
             var side = new DockPanel { Margin = new Thickness(18, 26, 18, 20) };
             var brand = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(6, 0, 0, 28) }; brand.Children.Add(Brand.Logo(28)); var name = T("Local Dictation", 15); name.Margin = new Thickness(10, 3, 0, 0); brand.Children.Add(name); DockPanel.SetDock(brand, Dock.Top); side.Children.Add(brand);
-            var footer = new StackPanel(); status = T(statusText, 11, "Muted"); status.Margin = new Thickness(8, 12, 4, 12); footer.Children.Add(status); var quit = B("Beenden", () => Application.Current.Shutdown()); quit.HorizontalContentAlignment = HorizontalAlignment.Left;quit.BorderThickness=new Thickness(0);quit.Background=Brushes.Transparent;quit.Padding=new Thickness(12,8,8,8);var quitLabel=new StackPanel{Orientation=Orientation.Horizontal};quitLabel.Children.Add(new TextBlock{Text="\uE7E8",FontFamily=new FontFamily("Segoe Fluent Icons"),FontSize=14,Foreground=R("Muted"),Margin=new Thickness(0,2,10,0)});quitLabel.Children.Add(T("Beenden",13,"Muted"));quit.Content=quitLabel;footer.Children.Add(quit); DockPanel.SetDock(footer, Dock.Bottom); side.Children.Add(footer);
+            var footer = new StackPanel(); status = T(statusText, 11, "Muted"); status.Margin = new Thickness(8, 12, 4, 12); footer.Children.Add(status); var quit = B("Beenden", () => Application.Current.Shutdown()); quit.HorizontalContentAlignment = HorizontalAlignment.Left;quit.BorderThickness=new Thickness(0);quit.Background=Brushes.Transparent;quit.Padding=new Thickness(12,8,8,8);var quitLabel=new StackPanel{Orientation=Orientation.Horizontal};quitLabel.Children.Add(new TextBlock{Text="\uE7E8",FontFamily=Theme.IconFont,FontSize=14,Foreground=R("Muted"),Margin=new Thickness(0,2,10,0)});quitLabel.Children.Add(T("Beenden",13,"Muted"));quit.Content=quitLabel;footer.Children.Add(quit); DockPanel.SetDock(footer, Dock.Bottom); side.Children.Add(footer);
             nav = new StackPanel(); side.Children.Add(nav); root.Children.Add(new Border { Background = R("Surface"), BorderBrush = R("Line"), BorderThickness = new Thickness(0, 0, 1, 0), Child = side });
             content = new Grid { Margin = new Thickness(24, 22, 24, 22) }; Grid.SetColumn(content, 1); root.Children.Add(content); Content = root; Navigation();
         }
         void Navigation() { nav.Children.Clear(); if (page == "settings") { Nav("‹  Zurück", "back", ShowHistory); Nav("Modelle", "model", () => SettingsPage("model")); Nav("Audio und Hotkeys", "audio", () => SettingsPage("audio")); Nav("Textausgabe", "output", () => SettingsPage("output")); Nav("Darstellung", "appearance", () => SettingsPage("appearance")); Nav("Allgemein", "general", () => SettingsPage("general")); } else { Nav("◷  Verlauf", "history", ShowHistory); Nav("Aa  Wörterbuch", "dictionary", ShowDictionary); Nav("▥  Statistik", "statistics", ShowStatistics); Nav("⚙  Einstellungen", "settings", ShowSettings); } }
         void Nav(string title, string key, Action action) { var b = B(title, action); b.HorizontalContentAlignment = HorizontalAlignment.Left; b.Margin = new Thickness(0, 3, 0, 3); b.Padding = new Thickness(12, 11, 8, 11); b.BorderThickness = new Thickness(0); b.Background = (key == page || page == "settings" && key == category) ? new SolidColorBrush(Color.FromArgb(40, 224, 91, 91)) : Brushes.Transparent; nav.Children.Add(b); }
-        StackPanel Page(string title, string subtitle) { FirstSelector = null; Navigation(); content.Children.Clear(); var p = new StackPanel(); p.Children.Add(T(title, 28)); var sub = T(subtitle, 13, "Muted"); sub.Margin = new Thickness(0, 8, 0, 24); p.Children.Add(sub); content.Children.Add(Scroll(p)); return p; }
+        StackPanel Page(string title, string subtitle) { SaveRules(); FirstSelector = null; Navigation(); content.Children.Clear(); var p = new StackPanel(); p.Children.Add(T(title, 28)); var sub = T(subtitle, 13, "Muted"); sub.Margin = new Thickness(0, 8, 0, 24); p.Children.Add(sub); content.Children.Add(Scroll(p)); return p; }
         Border Card(UIElement child) => new Border { Child = child, Background = R("Surface"), BorderBrush = R("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(18), Margin = new Thickness(0, 0, 0, 12) };
         public void SetStatus(string value) { statusText = value; if (status != null) status.Text = value; }
         public void RefreshTheme() { Theme.Apply(this, settings.Theme); WindowTheme.Apply(this, settings.Theme); Build(); if (page == "dictionary") ShowDictionary(); else if(page=="statistics")ShowStatistics(); else if (page == "settings") SettingsPage(category); else ShowHistory(); }
@@ -46,17 +50,17 @@ namespace LocalDictation
         ScrollViewer Smooth(ScrollViewer scroll) { scroll.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;scroll.HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled;scroll.Padding=new Thickness(0,0,5,0);scroll.Resources[SystemParameters.VerticalScrollBarWidthKey]=7.0;scroll.Resources[SystemParameters.VerticalScrollBarButtonHeightKey]=72.0;scroll.PreviewMouseWheel+=(s,e)=>{scroll.ScrollToVerticalOffset(scroll.VerticalOffset-e.Delta*.25);e.Handled=true;};return scroll; }
         StackPanel DensePage(string title,string subtitle,out StackPanel toolbar) {var rows=new StackPanel();DensePage(title,subtitle,out toolbar,Scroll(rows));return rows;}
         void DensePage(string title,string subtitle,out StackPanel toolbar,UIElement body) {
-            Navigation();content.Children.Clear();var grid=new Grid();grid.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});grid.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});grid.RowDefinitions.Add(new RowDefinition());
+            SaveRules();Navigation();content.Children.Clear();var grid=new Grid();grid.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});grid.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});grid.RowDefinitions.Add(new RowDefinition());
             var heading=new StackPanel{Margin=new Thickness(0,0,0,12)};heading.Children.Add(T(title,24));var hint=T(subtitle,12,"Muted");hint.Margin=new Thickness(0,4,0,0);heading.Children.Add(hint);grid.Children.Add(heading);
             toolbar=new StackPanel{Margin=new Thickness(0,0,0,10)};Grid.SetRow(toolbar,1);grid.Children.Add(toolbar);
             Grid.SetRow(body,2);grid.Children.Add(body);content.Children.Add(grid);
         }
         TextBox Search(StackPanel parent,string hint,string initial) {
             var host=new Grid{Height=30,Width=320,HorizontalAlignment=HorizontalAlignment.Left,Margin=new Thickness(0,0,0,5)};var box=new TextBox{Text=initial,Padding=new Thickness(28,5,8,4),FontSize=13};AutomationProperties.SetName(box,hint);box.ToolTip=hint;host.Children.Add(box);
-            var icon=new TextBlock{Text="\uE721",FontFamily=new FontFamily("Segoe Fluent Icons"),Foreground=R("Muted"),Margin=new Thickness(9,0,0,0),VerticalAlignment=VerticalAlignment.Center,IsHitTestVisible=false};host.Children.Add(icon);
+            var icon=new TextBlock{Text="\uE721",FontFamily=Theme.IconFont,Foreground=R("Muted"),Margin=new Thickness(9,0,0,0),VerticalAlignment=VerticalAlignment.Center,IsHitTestVisible=false};host.Children.Add(icon);
             var placeholder=T(hint,13,"Muted");placeholder.Margin=new Thickness(29,0,0,0);placeholder.VerticalAlignment=VerticalAlignment.Center;placeholder.IsHitTestVisible=false;host.Children.Add(placeholder);void Update()=>placeholder.Visibility=box.Text.Length==0?Visibility.Visible:Visibility.Collapsed;box.TextChanged+=(s,e)=>Update();Update();parent.Children.Add(host);return box;
         }
-        Button IconButton(string glyph,string label,Action action) {var button=B(glyph,action);button.FontFamily=new FontFamily("Segoe Fluent Icons");button.FontSize=13;button.Width=26;button.Height=26;button.Padding=new Thickness(0);button.Margin=new Thickness(1,0,0,0);button.BorderThickness=new Thickness(0);button.Background=Brushes.Transparent;button.ToolTip=label;AutomationProperties.SetName(button,label);return button;}
+        Button IconButton(string glyph,string label,Action action) {var button=B(glyph,action);button.FontFamily=Theme.IconFont;button.FontSize=13;button.Width=26;button.Height=26;button.Padding=new Thickness(0);button.Margin=new Thickness(1,0,0,0);button.BorderThickness=new Thickness(0);button.Background=Brushes.Transparent;button.ToolTip=label;AutomationProperties.SetName(button,label);return button;}
         public void ShowHistory()
         {
             page="history";var rows=new VirtualRows<HistoryEntry>(HistoryRow);Smooth(rows.Scroll);var empty=T("",13,"Muted");var body=new Grid();body.Children.Add(rows);body.Children.Add(empty);DensePage("Verlauf","Diktate der letzten 30 Tage · Aufnahmen bleiben eine Stunde verfügbar",out var toolbar,body);var search=Search(toolbar,"Verlauf durchsuchen …",historyQuery);var entries=Storage.LoadHistory(dataDir);
@@ -88,7 +92,7 @@ namespace LocalDictation
             void Put(UIElement child,int column){Grid.SetColumn(child,column);row.Children.Add(child);}
             var handle=Grip("Regel "+(index+1)+" verschieben",6);
             Put(handle,0);var arrow=T("→",12,"Muted");arrow.HorizontalAlignment=HorizontalAlignment.Center;arrow.VerticalAlignment=VerticalAlignment.Center;Put(arrow,2);
-            for(int n=0;n<2;n++){bool source=n==0;var box=new TextBox{Text=source?r.Source:r.Target,Height=28,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,Padding=new Thickness(6,4,6,3),FontSize=13,ToolTip=source?"Ersetzen":"Durch"};AutomationProperties.SetName(box,(source?"Ersetzen ":"Durch ")+(index+1));box.TextChanged+=(s,e)=>{if(source)r.Source=box.Text;else r.Target=box.Text;Storage.SaveSettings(settings);};Put(box,n==0?1:3);}
+            for(int n=0;n<2;n++){bool source=n==0;var box=new TextBox{Text=source?r.Source:r.Target,Height=28,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,Padding=new Thickness(6,4,6,3),FontSize=13,ToolTip=source?"Ersetzen":"Durch"};AutomationProperties.SetName(box,(source?"Ersetzen ":"Durch ")+(index+1));box.TextChanged+=(s,e)=>{if(source)r.Source=box.Text;else r.Target=box.Text;QueueRuleSave();};box.LostFocus+=(s,e)=>SaveRules();Put(box,n==0?1:3);}
             var mode=B(r.Whole?"Wort":"Teil",()=>{});mode.Width=48;mode.Height=26;mode.Padding=new Thickness(2);mode.Margin=new Thickness(4,0,0,0);mode.FontSize=11;mode.ToolTip="Ganzes Wort oder Wortteil";mode.Click+=(s,e)=>{r.Whole=!r.Whole;mode.Content=r.Whole?"Wort":"Teil";Save();};Put(mode,4);
             var exact=B("Aa",()=>{});exact.Width=31;exact.Height=26;exact.Margin=new Thickness(4,0,0,0);exact.Padding=new Thickness(0);exact.FontSize=12;exact.ToolTip="Groß-/Kleinschreibung beachten";AutomationProperties.SetName(exact,"Groß-/Kleinschreibung beachten "+(index+1));void CaseStyle(){exact.Background=r.CaseSensitive?new SolidColorBrush(Color.FromArgb(55,224,91,91)):Brushes.Transparent;exact.BorderThickness=r.CaseSensitive?new Thickness(1):new Thickness(0);}CaseStyle();exact.Click+=(s,e)=>{r.CaseSensitive=!r.CaseSensitive;CaseStyle();Save();};Put(exact,5);
             Put(IconButton("\uE74D","Regel "+(index+1)+" löschen",()=>{settings.Rules.Remove(r);Save();ShowDictionary();}),6);
@@ -120,7 +124,7 @@ namespace LocalDictation
             category = key; page = "settings"; var p = Page(key == "model" ? "Modelle" : key == "audio" ? "Audio und Hotkeys" : key == "output" ? "Textausgabe" : key == "appearance" ? "Darstellung" : "Allgemein", "Einstellungen werden automatisch gespeichert.");
             if (key == "model")
             {
-                Select(p, "Automatischer Modellwechsel", "ASUS Leise und Windows-Energiesparen verwenden Parakeet auf der CPU. ASUS Performance, Turbo, PD Performance und Windows-Höchstleistung verwenden Whisper auf der GPU. Ausbalancierte und unbekannte Profile ändern das Modell nicht.", new[] { "Aus", "Nach Leistungsmodus" }, settings.AutomaticPowerModel ? 1 : 0, i => { settings.AutomaticPowerModel = i == 1; Save(); SettingsPage(key); });
+                Select(p, "Automatischer Modellwechsel", "ASUS Leise, PD Leise und Windows-Energiesparen verwenden Parakeet auf der CPU. ASUS Performance, Turbo, PD Performance, PD Turbo und Windows-Höchstleistung verwenden Whisper auf der GPU. Ausbalancierte und unbekannte Profile ändern das Modell nicht.", new[] { "Aus", "Nach Leistungsmodus" }, settings.AutomaticPowerModel ? 1 : 0, i => { settings.AutomaticPowerModel = i == 1; Save(); SettingsPage(key); });
                 Select(p, "Aktives Modell", "Whisper 3 Turbo verwendet die dedizierte GPU. Parakeet läuft auf der CPU. Beide arbeiten vollständig lokal.", new[] { "Whisper 3 Turbo · GPU", "Parakeet TDT 0.6B v3 · CPU" }, settings.Engine == "parakeet" ? 1 : 0, i => { if (Busy) { SetStatus("Beende zuerst das laufende Diktat."); SettingsPage(key); return; } settings.Engine = i == 1 ? "parakeet" : "whisper"; settings.Device = i == 1 ? "cpu" : "gpu"; Save(); engineChanged(settings.Engine); }, !settings.AutomaticPowerModel);
                 var idleValues = new[] { 0, 3, 5, 10 }; int idleIndex = Array.IndexOf(idleValues, settings.WhisperIdleMinutes);
                 Select(p, "Whisper im Leerlauf", "Gibt den Grafikspeicher nach der gewählten Zeit ohne Diktat frei. Die nächste Aufnahme beginnt sofort; falls Whisper noch lädt, wartet die Transkription nach der Aufnahme kurz.", new[] { "Geladen lassen", "Nach 3 Minuten entladen", "Nach 5 Minuten entladen", "Nach 10 Minuten entladen" }, Math.Max(0, idleIndex), i => { settings.WhisperIdleMinutes = idleValues[i]; Save(); });
@@ -150,13 +154,23 @@ namespace LocalDictation
             }
             else
             {
-                Select(p, "Mit Windows starten", "Autostart öffnet nur Overlay und Tray. Du kannst ihn auch in Windows deaktivieren.", new[] { "Aus", "Ein" }, Autostart.Enabled ? 1 : 0, i => Autostart.Set(i == 1));
-                Info(p, "Local Dictation 0.2", "Native WPF-App mit C# und C++-Modelllaufzeiten. Python ist für den Betrieb nicht erforderlich. Fenster schließen lässt die App im Hintergrund weiterlaufen.");
-                Info(p, "Daten und Updates", "Einstellungen und Verlauf liegen unter LocalAppData\\LocalDictation. Modellpakete bleiben bei App-Updates erhalten. Vorhandene Daten aus dem Grundgerüst werden übernommen; Originaldateien bleiben als Migrationssicherung bestehen.");
-                Info(p, "Modelle und Lizenzen", "Whisper: OpenAI, MIT. Parakeet: NVIDIA, CC BY 4.0; ONNX-Konvertierung von sherpa-onnx. Laufzeiten: whisper.cpp / Whisper.net, MIT; sherpa-onnx, Apache 2.0. Quellen und Hinweise stehen in THIRD-PARTY-NOTICES.md.");
+                string other = Autostart.Other; Select(p, "Mit Windows starten", "Autostart öffnet nur Overlay und Tray. Du kannst ihn auch in Windows deaktivieren." + (other == null ? "" : (File.Exists(other) ? " Derzeit startet Windows eine andere Kopie: " : " Der Autostart verweist auf eine nicht mehr vorhandene Kopie: ") + other + ". „Ein“ startet stattdessen diese Kopie."), new[] { "Aus", "Ein" }, Autostart.Enabled ? 1 : 0, i => { Autostart.Set(i == 1); SettingsPage(key); });
+                Info(p, "Local Dictation " + AppVersion, "Lokale Diktier-App für Windows. Gesprochenes wird vollständig auf diesem Gerät transkribiert. Fenster schließen lässt die App im Hintergrund weiterlaufen. Open Source unter der MIT-Lizenz · github.com/m-lahme/local-dictation");
+                Info(p, "Daten und Updates", "Einstellungen und Verlauf liegen unter LocalAppData\\LocalDictation. Modellpakete bleiben bei App-Updates erhalten.");
+                var licenses = new StackPanel(); licenses.Children.Add(T("Modelle und Lizenzen", 15)); var notice = T("Local Dictation: MIT. Whisper: OpenAI, MIT. Parakeet TDT 0.6B v3: NVIDIA, CC BY 4.0; ONNX-Konvertierung von sherpa-onnx. Laufzeiten: whisper.cpp und Whisper.net, MIT; sherpa-onnx, Apache 2.0; ONNX Runtime, MIT; NAudio, MIT; .NET, MIT. Quellen, Modell-Links und Lizenztexte stehen im Programmordner in THIRD-PARTY-NOTICES.md und im Ordner licenses.", 12, "Muted"); notice.Margin = new Thickness(0, 7, 0, 12); licenses.Children.Add(notice); var open = new WrapPanel(); open.Children.Add(B("Lizenzhinweise öffnen", OpenLicenses)); licenses.Children.Add(open); p.Children.Add(Card(licenses));
             }
         }
         static readonly string[] Anchors = { "bottom-center", "bottom-left", "bottom-right", "top-center", "top-left", "top-right" };
+        public static string AppVersion => VersionLabel(typeof(MainWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? typeof(MainWindow).Assembly.GetName().Version?.ToString(3));
+        // The SDK appends "+<commit>" to the informational version; the UI shows only the release number.
+        public static string VersionLabel(string version) { version ??= ""; int plus = version.IndexOf('+'); return (plus < 0 ? version : version.Substring(0, plus)).Trim(); }
+        void OpenLicenses()
+        {
+            string notices = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.md"), folder = Path.Combine(AppContext.BaseDirectory, "licenses");
+            if (File.Exists(notices)) Process.Start("explorer.exe", "/select,\"" + notices + "\"")?.Dispose();
+            else if (Directory.Exists(folder)) Process.Start("explorer.exe", "\"" + folder + "\"")?.Dispose();
+            else throw new FileNotFoundException("Die Lizenzhinweise fehlen in diesem Programmordner. Sie stehen im Quellcode-Repository in THIRD-PARTY-NOTICES.md und im Ordner licenses.");
+        }
         public void RefreshModelSettings() { if (page == "settings" && category == "model") SettingsPage("model"); }
         public void RefreshMicrophones(List<MicrophoneInfo> found = null) { if (found != null) microphoneScan = found; if (page == "settings" && category == "audio") renderMicrophones?.Invoke(); }
         void Microphones(StackPanel p)
@@ -181,7 +195,7 @@ namespace LocalDictation
             void Put(UIElement child, int column) { Grid.SetColumn(child, column); row.Children.Add(child); }
             var handle = Grip(title + ", Priorität " + (index + 1) + ", verschieben", 15);
             Put(handle, 0);
-            var icon = new TextBlock { Text = MicrophoneCatalog.Glyph(m.Kind), FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 20, Foreground = used ? R("Accent") : R("Text"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Opacity = connected ? 1 : .5 }; Put(icon, 1);
+            var icon = new TextBlock { Text = MicrophoneCatalog.Glyph(m.Kind), FontFamily = Theme.IconFont, FontSize = 20, Foreground = used ? R("Accent") : R("Text"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Opacity = connected ? 1 : .5 }; Put(icon, 1);
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 10, 0), Opacity = connected ? 1 : .6 }; var name = T(title, 14); name.TextWrapping = TextWrapping.NoWrap; name.TextTrimming = TextTrimming.CharacterEllipsis; text.Children.Add(name);
             var details = T(MicrophoneCatalog.Details(m) + (standard ? " · Windows-Standard" : ""), 12, "Muted"); details.Margin = new Thickness(0, 2, 0, 0); text.Children.Add(details); Put(text, 2);
             var label = T(state, 11, used ? "Text" : "Muted"); if (used) label.FontWeight = FontWeights.SemiBold;
@@ -193,7 +207,7 @@ namespace LocalDictation
             Reorderable(p, host, card, handle, m, settings.Microphones, rest, MicrophonesReordered);
             p.Children.Add(host);
         }
-        TextBlock Grip(string name, double top) { var grip = new TextBlock { Text = "", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 16, Foreground = R("Muted"), VerticalAlignment = VerticalAlignment.Stretch, TextAlignment = TextAlignment.Center, Padding = new Thickness(0, top, 0, 0), Background = Brushes.Transparent, Cursor = System.Windows.Input.Cursors.SizeNS, ToolTip = "Ziehen · Alt+Pfeil zum Verschieben", Focusable = true }; AutomationProperties.SetName(grip, name); return grip; }
+        TextBlock Grip(string name, double top) { var grip = new TextBlock { Text = "", FontFamily = Theme.IconFont, FontSize = 16, Foreground = R("Muted"), VerticalAlignment = VerticalAlignment.Stretch, TextAlignment = TextAlignment.Center, Padding = new Thickness(0, top, 0, 0), Background = Brushes.Transparent, Cursor = System.Windows.Input.Cursors.SizeNS, ToolTip = "Ziehen · Alt+Pfeil zum Verschieben", Focusable = true }; AutomationProperties.SetName(grip, name); return grip; }
         // Pointer-driven reordering: the grabbed row follows the cursor while the others slide aside to show where it will land.
         void Reorderable<T>(StackPanel rows, Border host, Border card, TextBlock handle, T item, List<T> list, Brush rest, Action reordered) where T : class
         {
