@@ -1,6 +1,8 @@
 # Native Windows V1 — consolidated planning snapshot
 
-> Status: Consolidated summary of the pre-map conversation and the Wayfinder decisions resolved through 2026-07-18. The canonical detail and rationale live in the [Wayfinder map](https://github.com/m-lahme/local-dictation/issues/1) and its linked decision tickets; a later ticket resolution takes precedence over this summary.
+> Status: Historical. Consolidated summary of the pre-map conversation and the Wayfinder decisions resolved through 2026-07-18. The canonical detail and rationale live in the [Wayfinder map](https://github.com/m-lahme/local-dictation/issues/1) and its linked decision tickets; a later ticket resolution takes precedence over this summary.
+>
+> The implementation differs from this plan in several places. The app is built with WPF (code-only UI) and a separate C# worker process, not WinUI 3. History, settings and statistics are stored as JSON files, not in SQLite. Releases ship as a ZIP with `setup.ps1`, not as MSIX. Recordings are kept for one hour so that a Dictation can be transcribed again. [README.md](../../README.md) and [CONTEXT.md](../../CONTEXT.md) describe the current behaviour.
 
 ## Destination
 
