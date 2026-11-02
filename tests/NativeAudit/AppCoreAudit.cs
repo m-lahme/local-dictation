@@ -110,6 +110,12 @@ internal static class AppCoreAudit
             Equal(6L, UsageLedgerStore.ForPeriod(ledger, 1, today.AddHours(18)).Words, "today's period counts today's dictations");
             ledger.Days.Add(new UsageDay { Date = "2569-11-02", Words = 100 }); ledger.Days.Add(new UsageDay { Date = "kaputt", Words = 1000 });
             Equal(6L, UsageLedgerStore.ForPeriod(ledger, 7, today.AddHours(18)).Words, "future and unreadable day keys stay out of periods");
+            CultureInfo.CurrentCulture = culture; File.Delete(Path.Combine(dir, "usage.json"));
+            var kept = new HistoryEntry { Id = "c", Time = today.AddHours(8), Text = "eins zwei", Status = "complete", DurationMs = 1000 };
+            UsageLedgerStore.Record(dir, kept); UsageLedgerStore.RecordRetranscription(dir, today.AddHours(8)); long total = UsageLedgerStore.Load(dir).Total.Retranscriptions;
+            UsageLedgerStore.SynchronizeHistory(dir, new[] { kept, new HistoryEntry { Id = "d", Time = today.AddHours(9), Status = "not-transcribed", DurationMs = 3000 } });
+            var synced = UsageLedgerStore.Load(dir);
+            Check(synced.Total.Dictations == 1 && synced.Total.Retranscriptions == total && synced.RecentDictations.All(x => x.Id == "c"), "untranscribed recordings neither count nor trigger a statistics rebuild");
         }
         finally { CultureInfo.CurrentCulture = culture; }
     }

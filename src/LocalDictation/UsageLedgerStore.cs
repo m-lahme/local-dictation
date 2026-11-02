@@ -30,7 +30,8 @@ namespace LocalDictation
         {
             lock (Gate)
             {
-                var entries=history.OrderBy(x=>x.Time).ToList();var ledger=Load(directory);var expected=entries.Select(x=>x.Id).ToHashSet(StringComparer.Ordinal);
+                // Recordings no model could transcribe are not dictations yet; they count once a retranscription gives them text.
+                var entries=history.Where(x=>x.Status!="not-transcribed").OrderBy(x=>x.Time).ToList();var ledger=Load(directory);var expected=entries.Select(x=>x.Id).ToHashSet(StringComparer.Ordinal);
                 bool complete=ledger.RecentDictations.Count==expected.Count&&ledger.RecentDictations.All(x=>expected.Contains(x.Id));
                 if(complete)return;
                 long retranscriptions=ledger.Total.Retranscriptions;var retryDays=ledger.Days.ToDictionary(x=>x.Date,x=>x.Retranscriptions,StringComparer.Ordinal);ledger=new UsageLedger();
