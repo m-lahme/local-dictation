@@ -21,7 +21,7 @@ A dictation whose speech capture starts and stops on separate activations of its
 _Avoid_: Toggle recording
 
 **Overlay**:
-The compact topmost surface that communicates the current Dictation state and provides access to application actions. It is visible by default but can be hidden while Local Dictation is idle. Starting a Dictation temporarily shows a hidden Overlay for capture and transcription feedback; after the Overlay returns to its idle state, it restores the user's prior hidden state. Dictation is controlled through global hotkeys and does not require interaction with the Overlay.
+The compact topmost surface that communicates the current Dictation state and provides access to application actions. By default it is hidden while Local Dictation is idle; it can be set to stay visible. Starting a Dictation temporarily shows a hidden Overlay for capture and transcription feedback; after the Overlay returns to its idle state, it restores the user's prior hidden state. Dictation is controlled through global hotkeys and does not require interaction with the Overlay.
 _Avoid_: Widget, toolbar
 
 **History entry**:

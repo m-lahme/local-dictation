@@ -34,15 +34,17 @@ The dictionary fixes words the model keeps getting wrong and expands short phras
 - Whisper requires a dedicated graphics card with a Vulkan driver and the [Microsoft Visual C++ Redistributable 2015–2022 (x64)](https://aka.ms/vc14/vc_redist.x64.exe). The download is about 550 MiB. Integrated graphics are currently not used; without a suitable GPU, Parakeet takes over.
 - Windows must allow desktop apps to access the microphone (Settings › Privacy & security › Microphone).
 
-## Installation
+## Getting started
 
-From a release ZIP:
+1. **Install.** Download the release ZIP and unblock it before extracting: right-click › Properties › "Unblock", or `Unblock-File .\LocalDictation-<Version>-win-x64.zip` in PowerShell. Extract the entire ZIP and run `setup.cmd`. The app is installed per user to `%LOCALAPPDATA%\Programs\Local Dictation` and gets a Start menu shortcut; administrator rights are not required. Alternatively, start `LocalDictation.exe` directly from the extracted folder.
+   The program files are not signed, so Windows SmartScreen warns on the first launch ("More info" › "Run anyway"). If Smart App Control is on, Windows blocks the app; then build it from source (see [Building and running](#building-and-running)).
+2. **Start Local Dictation** from the Start menu. The main window opens, and an icon appears in the system tray (it may be hidden under the ^ arrow next to the clock). On the first start, the app downloads the Parakeet model (about 640 MiB) in the background; the progress is shown at the bottom left of the main window. You can already dictate; the transcription waits until the download is complete.
+3. **Dictate.** Click into any text field, briefly press **Ctrl + Windows**, speak, and press **Ctrl + Windows** again. The text is inserted at the cursor. Alternatively, hold the keys while speaking and release them when you are done (push-to-talk). **Escape** discards the dictation. While you dictate, a small overlay at the bottom center of the screen shows the state.
+4. **Keep it running.** Closing the main window does not quit the app; it keeps running in the tray, and nothing is visible until you dictate. To open the window again, left-click the tray icon or start Local Dictation again from the Start menu. In the window you find the history, the dictionary, statistics and the settings, for example the hotkey, the microphone priority, Whisper on a dedicated GPU, language, theme and starting with Windows.
 
-1. Unblock the ZIP file before extracting it: right-click › Properties › "Unblock", or in PowerShell `Unblock-File .\LocalDictation-<Version>-win-x64.zip`.
-2. Extract the entire ZIP and run `setup.cmd`. The app is installed per user to `%LOCALAPPDATA%\Programs\Local Dictation` and gets a Start menu shortcut. Administrator rights are not required. Alternatively, you can start `LocalDictation.exe` directly from the extracted folder.
-3. The program files are not signed, so Windows SmartScreen warns on first launch ("More info" › "Run anyway"). If Smart App Control is on, Windows blocks the app; the only way around that is building from source.
+### Updating
 
-Updates are installed the same way. The previous installation is kept as a fallback folder; older fallback folders are removed.
+Install a new release the same way. Settings, history and models are kept. The previous installation is kept as a fallback folder; older fallback folders are removed.
 
 ### Uninstalling
 
@@ -50,13 +52,14 @@ Run `setup.cmd -Uninstall` in the extracted release folder. This quits the app a
 
 ## Usage
 
-When the app starts, the overlay appears. Starting it again opens the main window of the running instance. Left-clicking the tray icon shows or hides the main window. If the overlay is hidden while idle, a normal start opens the main window instead. Starting with Windows does not open the main window.
-
 - A short press of Ctrl + Windows starts a dictation; pressing it again stops it.
-- Holding the keys past the hold threshold and then releasing them uses push-to-talk.
+- Holding the keys past the hold threshold (400 ms by default) and then releasing them uses push-to-talk.
 - Pressing twice quickly opens the correction of the last dictation, based on the selected, corrected text.
-- Ctrl + Shift + Space can be configured as an alternative.
+- Ctrl + Shift + Space can be configured as an alternative under Settings › Audio and hotkeys.
 - Escape discards the recording, the model wait or the transcription. While idle, Escape is left to other applications.
+- Left-clicking the tray icon shows or hides the main window; right-clicking opens the menu. Starting the app again opens the main window of the running instance; starting with Windows does not.
+- The overlay appears at the bottom center of the main display while a dictation is recording or being processed. Under Settings › Appearance you can change its position and display, or keep it visible while idle ("Overlay when idle"); a normal start then shows only the overlay instead of the main window.
+- Clicking the overlay opens the same menu as the tray icon, which is handy when you keep the overlay visible. Dragging it moves it for the current session.
 - Closing the window keeps the app running. To quit completely, choose Quit in the sidebar, the tray menu or the overlay menu.
 
 ## Languages

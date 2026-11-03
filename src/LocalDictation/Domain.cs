@@ -49,7 +49,7 @@ namespace LocalDictation
         public string Monitor { get; set; } = "";
         public string Hotkey { get; set; } = HotkeyInput.Binding;
         public int HoldMs { get; set; } = 400;
-        public bool OverlayVisible { get; set; } = true;
+        public bool OverlayVisible { get; set; }
         public bool CloseExplained { get; set; }
         public bool VoiceCommands { get; set; } = true;
         public int TypingWpm { get; set; } = 40;
