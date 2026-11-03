@@ -12,6 +12,8 @@ The optional `-Visual` switch opens WPF windows and writes render images and gen
 
 The audit executable also exposes explicit integration modes: `--clipboard-test`, `--clipboard-test-disposable`, `--meter-test`, `--capture-test` and `--input-test`. They access real hardware, windows or the clipboard; they are not part of the default run and some retain assumptions from earlier hardware investigations. Inspect the corresponding test before using it, and pass an isolated data directory as the second argument.
 
+`--readme-images` renders the screenshots in `docs/images/` from the real UI with neutral English sample data; pass a scratch data directory such as `work/readme-data`. It briefly opens windows off screen.
+
 `--history-benchmark` opens the history page several times with the `history.json` from the given data directory, scrolls through it and prints the timings. To measure realistic sizes, copy a real history to `work/history-benchmark/` (ignored by git) and pass that folder; the benchmark also saves a screenshot of that history there.
 
 ## Manual model tests

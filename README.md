@@ -4,6 +4,29 @@ A native dictation app for Windows 11 x64: start a recording with a hotkey, tran
 
 License: [MIT](LICENSE). Notices for the libraries and models used are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
+## Screenshots
+
+A small overlay at the edge of the screen shows the state of the current dictation:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/overlay-dark.png">
+  <img src="docs/images/overlay-light.png" width="541" alt="Overlay states: ready, recording, transcribing, inserted, inserted with a review hint, error, and not inserted with the text on the clipboard">
+</picture>
+
+The history keeps your dictations for 30 days. Recordings stay available for an hour, so a dictation can be transcribed again with the other model:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/history-dark.png">
+  <img src="docs/images/history-light.png" alt="History page with recent dictations, a review hint and a dictation that was not inserted">
+</picture>
+
+The dictionary fixes words the model keeps getting wrong and expands short phrases, in the order shown:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dictionary-dark.png">
+  <img src="docs/images/dictionary-light.png" alt="Dictionary page with replacement rules such as Jason to JSON and git hub to GitHub">
+</picture>
+
 ## Requirements
 
 - Windows 11 x64. Windows 10 and Windows on ARM are untested. On ARM, the x64 build runs under emulation and then only with Parakeet.
